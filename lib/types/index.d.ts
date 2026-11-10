@@ -4,12 +4,19 @@
  * default-board creation, whole-board CAS write, health) over the loopback
  * trust fence. The board file is plain JSON at
  * `<workspace>/.dsh/taskboard/board.json`, equally writable by agents with
- * file tools. The browser half (./client) renders the board panel.
+ * file tools. Besides the routes, the plugin registers a runtime skill
+ * (`taskboard`) into the host skills registry so every session's agent
+ * discovers how to operate the board file. The browser half (./client)
+ * renders the board panel.
  */
 import type { Context } from '@deepseek-ai/cordis';
 /** Stable cordis plugin name. */
 export declare const name = "taskboard";
-/** Services required before the board routes can mount. */
+/**
+ * Services required before the board routes can mount. `skills` guarantees the
+ * registry exists when the agent-facing skill registers (same hard-inject
+ * pattern the official skill center plugin uses).
+ */
 export declare const inject: string[];
 /** Host-side plugin config. */
 export interface Config {

@@ -4,7 +4,10 @@
  * default-board creation, whole-board CAS write, health) over the loopback
  * trust fence. The board file is plain JSON at
  * `<workspace>/.dsh/taskboard/board.json`, equally writable by agents with
- * file tools. The browser half (./client) renders the board panel.
+ * file tools. Besides the routes, the plugin registers a runtime skill
+ * (`taskboard`) into the host skills registry so every session's agent
+ * discovers how to operate the board file. The browser half (./client)
+ * renders the board panel.
  */
 
 import { homedir } from 'node:os'
@@ -12,14 +15,19 @@ import { sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { readOrInitBoard, saveBoard } from './host/board-store.ts'
 import { makeRoutes } from './host/routes.ts'
+import { registerBoardSkill, type SkillsFace } from './host/skill.ts'
 import { normalizeWorkspaceRoot, projcacheCwds as readProjcacheCwds } from './host/workspaces.ts'
 import { mountOnce } from './mount-once.ts'
 
 /** Stable cordis plugin name. */
 export const name = 'taskboard'
 
-/** Services required before the board routes can mount. */
-export const inject = ['webServer', 'sessions']
+/**
+ * Services required before the board routes can mount. `skills` guarantees the
+ * registry exists when the agent-facing skill registers (same hard-inject
+ * pattern the official skill center plugin uses).
+ */
+export const inject = ['webServer', 'skills', 'sessions']
 
 /** Structural face of the host sessions service this plugin reads. */
 interface SessionsFace {
@@ -60,7 +68,7 @@ export function resolveRequestedWorkspace(override: string | undefined): string 
  */
 function applyImpl(ctx: Context, config?: Config): void {
   if (config?.enabled === false) return
-  const hostCtx = ctx as Context & { webServer: WebServerFace; sessions?: SessionsFace }
+  const hostCtx = ctx as Context & { webServer: WebServerFace; sessions?: SessionsFace; skills?: SkillsFace }
   const dshHome = config?.dshHome ?? process.env.DSH_HOME ?? `${homedir()}${sep}.dsh`
 
   /** Running session cwds, degraded to [] when the registry is unavailable. */
@@ -92,11 +100,13 @@ function applyImpl(ctx: Context, config?: Config): void {
     logger: { warn: (error) => ctx.logger.warn(error) },
   })
   ctx.effect(() => {
+    const skillDisposer = registerBoardSkill(hostCtx.skills, (message) => ctx.logger.warn(message))
     const disposers = routes.map((route) => hostCtx.webServer.register(route))
     return () => {
+      skillDisposer?.()
       for (const dispose of disposers) dispose()
     }
-  }, 'taskboard: routes')
+  }, 'taskboard: routes and skill')
 }
 
 /**

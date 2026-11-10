@@ -11,7 +11,7 @@
   `25:1` 阶段色板弹层（board-stage-popover）。帧在画布上的 x/y 按用户视口临时摆放，不影响内容。
 - 工具行右对齐已按**节点树实测坐标**修复：四帧按钮组右缘均 = 1501.0（内容区右缘，零偏差）。
   特写图：`design/screenshots/toolbar-closeup-v6.png`。
-- **Phase 1 插件实现**：已完成（2026-11-10）。宿主路由、看板 UI、CAS 写入、删除防护、101 项单测全部就绪，
+- **Phase 1 插件实现**：已完成（2026-11-10）。宿主路由、看板 UI、CAS 写入、删除防护、agent skill 注册、109 项单测全部就绪，
   已以 GitHub 依赖 `github:ykcory/dsh-taskboard` 形态装进 desktop profile（`lib/` 入库后安装可用，
   见「安装形态」条目），行 `ui-taskboard` 为 enabled。**需用户重启 DSH 服务后右侧栏开始页才会出现卡片。**
 
@@ -43,7 +43,7 @@
 pnpm install     # 首次；.npmrc/package.json 已声明 pnpm.ignoredBuiltDependencies 规避 ERR_PNPM_IGNORED_BUILDS
 pnpm build       # tailwind → tsc 声明 → tsdown（产出 lib/index.js + lib/client.js + lib/types）
 pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest run（tests/ 下 7 个 spec，101 用例）
+pnpm test        # vitest run（tests/ 下 8 个 spec，109 用例）
 ```
 
 > **pnpm 安装提示**：`ERR_PNPM_IGNORED_BUILDS` 对 `@deepseek-ai/dsh-subprocess-local`、`node-pty`、`koffi` 等
@@ -62,9 +62,10 @@ pnpm test        # vitest run（tests/ 下 7 个 spec，101 用例）
 
 ```
 src/
-  index.ts                宿主入口：注册 /api/dsh-taskboard/* 路由（inject webServer + sessions，mountOnce 防重）
+  index.ts                宿主入口：注册 /api/dsh-taskboard/* 路由 + 注册 agent skill（inject webServer + skills + sessions，mountOnce 防重）
   core/board.ts           数据模型 + 整板校验 + 删除防护 + 默认板（宿主与浏览器半区共用）
   host/board-store.ts     board.json 读写：原子写、整板 CAS、坏 JSON 拒绝覆盖、缺文件时建默认板
+  host/skill.ts           agent skill 定义与防御式注册（ctx.skills.register，见实现要点）
   host/workspaces.ts      工作区枚举（sessions cwd ∪ projcache identity.cwd）与路径规范化
   host/routes.ts          三个路由：workspaces / board(GET+PUT) / health，全部走 loopback 围栏
   http.ts loopback.ts mount-once.ts   从 dsh-web 家族 vendored 的共用模块
@@ -77,7 +78,7 @@ src/
     view/                 React 看板 UI：TaskboardPanel（停靠栏）/ StageColumn / Modals / dnd（拖拽状态）/ icons / tint / GuideArtwork（卡片图标）
     tailwind.input.css    Tailwind 入口（@source "./" 扫描 view/）
 design/                   Phase 0 设计稿（4 个 HTML + 生成器 + 截图）
-tests/                    7 个 spec / 101 用例：board、board-store、workspaces、routes、controller、right-panel、tint
+tests/                    8 个 spec / 109 用例：board、board-store、workspaces、routes、skill-registration、controller、right-panel、tint
 ```
 
 ## 设计稿流程（ardot MCP）
@@ -153,6 +154,13 @@ ardot MCP 在 `http://127.0.0.1:50501/api/v1/mcp`（本机 ardot 应用）。改
   就是装到了不含产物的源码版本。
 - API：`GET /workspaces`、`GET /board?ws=`、`PUT /board?ws=`（expectedRevision 整板 CAS；坏 JSON 拒绝覆盖；
   删阶段时阶段内仍有事项则阻止）；另 `GET /health`。
+- **Agent skill 运行时注册（2026-11-10，用户定稿走 B 路线）**：宿主 `inject` 增加 `skills`
+  （硬注入，与官方 skill center 插件同款模式），apply 时经 `ctx.skills.register()` 把 `TASKBOARD_SKILL`
+  （`src/host/skill.ts`）注册为**全局 runtime skill**（来源 rank 250；项目/用户级同名 skill 可覆盖它）。
+  官方名文法 `/^[a-z0-9]+(?:-[a-z0-9]+)*$/`；`description` 常驻每个会话的 skill 目录摘要 = 发现入口
+  （埋「更新任务/任务看板/board.json」触发词），`content` 为操作规则全文（数组顺序即排序、revision +1、
+  id 文法、容量上限等，**与 `core/board.ts` 校验规则须同步维护**）。`registerBoardSkill` 防御式降级：
+  服务缺 register / 注册抛错 / 无 disposer 均不影响路由。单测 `tests/skill-registration.spec.ts` 8 项。
 - **工作区解析必须显式，任何一方都不猜默认（2026-11-10 修复踩坑）**：曾因「无 ws 时宿主回退
   `sessions.list()[0]`」导致所有工作区面板读写同一份板子（恰好旧目录 `dsh-taskbord` 的会话排第一）。
   现约定：宿主 `resolveRequestedWorkspace` 无 ws 一律 undefined → 路由 400；客户端页签体按内建
