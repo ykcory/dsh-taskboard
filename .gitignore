@@ -3,3 +3,4 @@ src/client/tailwind.gen.css
 *.tsbuildinfo
 .DS_Store
 .dsh/
+.skill-lab/
