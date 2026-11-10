@@ -1,72 +1,74 @@
 # dsh-taskboard
 
-为 DeepSeek Harness（DSH）Web GUI 开发的原生「任务看板」右侧栏插件：每个工作区一块看板，看板内用里程碑页签切分，事项卡片在可自定义的阶段（列）之间流转。
+**English** | [简体中文](README.zh-CN.md)
 
-![主界面预览](design/screenshots/745806795348219/screenshot-21_1-20261110_111056948.png)
+A native "Taskboard" sidebar plugin for the DeepSeek Harness (DSH) Web GUI: one board per workspace, milestone tabs within a board, and task cards flowing across customizable stages (columns).
 
-## 功能特性
+![Board preview](design/screenshots/745806795348219/screenshot-21_1-20261110_111056948.png)
 
-- **里程碑页签**：M0 / M1 / M2… 自由增删；右键重命名 / 删除（最后一个里程碑不可删，仍有事项的里程碑不可删）。
-- **事项卡片**：右键编辑（标题 + 所属阶段，一次提交）/ 删除；六点把手拖拽，同阶段内排序或跨阶段移动。
-- **自定义阶段**：名称 + 颜色（8 色板）随意搭配——列头色块点选改色，阶段名点击 inline 改名；新增阶段填名即建（颜色随机）；阶段内仍有事项时禁止删除。
-- **默认板**：新工作区自动初始化 1 个里程碑「M1」+ 4 个预置阶段（初始化 / 执行中 / 待审核 / 已完成）。
-- **数据即文件**：整板存在 `<工作区>/.dsh/taskboard/board.json`，无数据库；整板 CAS（`expectedRevision`）写保护，坏 JSON 拒绝覆盖。AI agent 可直接用文件工具读改排序（数组顺序即展示顺序）。
-- **中英双语** UI，跟随宿主语言设置。
+## Features
 
-## 概念与数据模型
+- **Milestone tabs**: M0 / M1 / M2… freely added and removed; right-click to rename / delete (the last milestone cannot be deleted, nor can one that still holds tasks).
+- **Task cards**: right-click to edit (title + stage, one commit) or delete; drag by the grip handle to reorder within a stage or move across stages.
+- **Customizable stages**: mix and match names with the 8-color palette — click a column-head dot to recolor, click a stage name to rename inline; adding a stage only needs a name (color picked at random); a stage that still holds tasks refuses deletion.
+- **Default board**: a fresh workspace starts with one milestone "M1" and four preset stages (Init / Running / Review / Done).
+- **Data is a file**: the whole board lives in `<workspace>/.dsh/taskboard/board.json` — no database; whole-board CAS (`expectedRevision`) guards concurrent writes, corrupt JSON is never overwritten. AI agents can reorder and edit the board directly with file tools.
+- **Bilingual UI** (English / Chinese), following the host language setting.
 
-| UI 概念 | 含义 | `board.json` 字段 |
+## Concepts & data model
+
+| UI concept | Meaning | `board.json` field |
 | --- | --- | --- |
-| 里程碑 | 页签 M0 / M1 / M2… | `epics` |
-| 事项 | 里程碑下的工作条目卡片 | `tasks` |
-| 阶段 | 带名字 + 颜色的流转环节（列） | `columns` |
+| Milestone | Tab M0 / M1 / M2… | `epics` |
+| Task | A work-item card under a milestone | `tasks` |
+| Stage | A named, colored flow step (column) | `columns` |
 
-事项即「某里程碑下、处于某阶段」的一条工作：`{ id, epicId, columnId, title, createdAt }`。阶段顺序 = `columns` 数组顺序；事项在其阶段内的展示顺序 = `tasks` 数组相对顺序——没有独立 order 字段，直接编辑 JSON 即可排序。
+A task is one piece of work "in some milestone, sitting in some stage": `{ id, epicId, columnId, title, createdAt }`. Stage order = the order of `columns`; a task's display order within its stage = its relative order in `tasks` — there are no separate order fields, so editing the JSON directly is enough to reorder.
 
-## 安装
+## Installation
 
-插件以本地 link 方式装入 DSH 的 profile（`cordis.patch.yml` 负责把插件行注入 profile 名册）：
+The plugin is installed into a DSH profile as a local link (`cordis.patch.yml` injects the plugin row into the profile roster):
 
 ```sh
-dsh plugin --profile <profile 名> add link:<本仓库路径>
+dsh plugin --profile <profile name> add link:<path to this repo>
 ```
 
-装好后**重启 DSH 服务**，右侧栏「开始」页出现「任务看板」卡片，点击即可在当前工作区打开看板。
+After installing, **restart the DSH service**; a "Taskboard" card appears on the right sidebar's start page — click it to open the board for the current workspace.
 
-## 开发
+## Development
 
 ```sh
-pnpm install     # 首次安装依赖
-pnpm build       # tailwind → tsc 声明 → tsdown（产出 lib/index.js + lib/client.js + lib/types）
+pnpm install     # first-time dependency install
+pnpm build       # tailwind → tsc declarations → tsdown (lib/index.js + lib/client.js + lib/types)
 pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest run（tests/ 下 7 个 spec，92 用例）
+pnpm test        # vitest run (7 specs / 92 tests under tests/)
 ```
 
-技术栈：TypeScript + React 18 + TailwindCSS（`@tailwindcss/cli` 预编译后由 tsdown 内联进 bundle）+ tsdown + vitest。宿主半区是 cordis 插件，注册 `/api/dsh-taskboard/*` 路由（loopback 围栏）；浏览器半区经 `ctx.sidebarRightTabs.register()` 挂右侧栏页签。改动 `src/client/**` 后需 `pnpm build` 重新生成 `lib/client.js`。
+Stack: TypeScript + React 18 + TailwindCSS (precompiled via `@tailwindcss/cli`, inlined into the bundle by tsdown) + tsdown + vitest. The host half is a cordis plugin registering the `/api/dsh-taskboard/*` routes (loopback fence); the browser half registers a right-sidebar tab via `ctx.sidebarRightTabs.register()`. After changing `src/client/**`, run `pnpm build` to regenerate `lib/client.js`.
 
-### 目录结构
+### Directory structure
 
 ```
 src/
-  index.ts                宿主入口：注册 /api/dsh-taskboard/* 路由（mountOnce 防重）
-  core/board.ts           数据模型 + 整板校验 + 删除防护 + 默认板（宿主与浏览器半区共用）
-  host/board-store.ts     board.json 读写：原子写、整板 CAS、坏 JSON 拒绝覆盖
-  host/workspaces.ts      工作区枚举与路径规范化
-  host/routes.ts          workspaces / board(GET+PUT) / health 三个路由
+  index.ts                Host entry: registers the /api/dsh-taskboard/* routes (mountOnce guard)
+  core/board.ts           Data model + whole-board validation + removal guards + default board (shared by both halves)
+  host/board-store.ts     board.json I/O: atomic write, whole-board CAS, corrupt-JSON protection
+  host/workspaces.ts      Workspace enumeration and path normalization
+  host/routes.ts          Three routes: workspaces / board (GET+PUT) / health
   client/
-    index.ts              客户端入口：注册 locale 字典 + 右侧栏页签类型
-    right-panel.tsx       页签类型 + guide 卡片 + 页签体/标题
-    controller.ts         框架无关的看板状态与全部操作（React 经 useSyncExternalStore 读）
-    api.ts                同源 fetch 客户端
-    locales.ts            zh 为 key 源，en 完整对照
-    view/                 React 看板 UI（面板 / 阶段列 / 弹窗 / 拖拽 / 图标）
-design/                   Phase 0 设计稿（4 个 HTML + 生成器 + 截图 + 排布工具）
-tests/                    7 个 spec / 92 用例：board、board-store、workspaces、routes、controller、right-panel、tint
+    index.ts              Client entry: registers the locale dictionaries + right-sidebar tab type
+    right-panel.tsx       Tab type + guide card + tab body/title
+    controller.ts         Framework-free board state and every operation (React reads via useSyncExternalStore)
+    api.ts                Same-origin fetch client
+    locales.ts            zh is the key source; en mirrors every key
+    view/                 React board UI (panel / stage column / modals / drag-and-drop / icons)
+design/                   Phase-0 design frames (4 HTML files + generator + screenshots + layout tools)
+tests/                    7 specs / 92 tests: board, board-store, workspaces, routes, controller, right-panel, tint
 ```
 
-## 设计稿
+## Design frames
 
-`design/` 内含 4 个界面帧的 HTML 源（主界面 / 新建事项弹层 / 新建里程碑弹层 / 阶段色板弹层），由 `design/build-design-html.mjs` 生成，经 ardot 转换为画布设计稿；`design/screenshots/` 存各版本视觉回看。README 顶部预览图即设计稿渲染。
+`design/` holds the HTML sources of the four UI frames (main board / new-task modal / new-milestone modal / stage color popover), generated by `design/build-design-html.mjs` and converted into canvas design frames via ardot; `design/screenshots/` keeps the visual review shots of each version. The preview image at the top of this README is one of those renders.
 
 ## License
 
