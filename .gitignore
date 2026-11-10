@@ -1,5 +1,4 @@
 node_modules/
-lib/
 src/client/tailwind.gen.css
 *.tsbuildinfo
 .DS_Store

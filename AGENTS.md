@@ -137,9 +137,15 @@ ardot MCP 在 `http://127.0.0.1:50501/api/v1/mcp`（本机 ardot 应用）。改
   里 `meta.title`/`meta.description`（`LocalizedText`，按界面语言选取，en 必备回退；缺失才回退 `package.json`
   的 `name`）。zh/en 均已写好：「任务看板」/ "Taskboard"；exports 用官方通配写法
   `"./locale/*.json": "./locale/*.json"`。包名本身是技术身份，无多语言，原样显示。
-- **安装形态教训（2026-11-10）**：曾以 GitHub 依赖 `github:ykcory/dsh-taskboard` 装进 desktop profile——
-  仓库不提交 `lib/` 产物且无 prepare 脚本，装出来没有构建产物、行被禁用、显示名回退包名。
-  已 remove 并改用 `link:` 本地目录安装（enabled）。除非仓库加 prepare 构建链，否则别用 git 依赖形态装本插件。
+- **安装形态与 GitHub 安装可用性（2026-11-10 定稿：`lib/` 入库）**：GitHub 依赖 `github:ykcory/dsh-taskboard`
+  由 pnpm 11 走 **codeload tarball 快路径**安装——不 clone 仓库、不跑任何构建脚本（且 pnpm 11 默认禁止
+  git-hosted 依赖执行 prepare，需消费者 allowBuilds 放行）。曾因仓库不提交 `lib/` 又无 prepare，装出来没有
+  `lib/index.js`，宿主报 `ERR_MODULE_NOT_FOUND`，行激活失败。**修复：`lib/` 构建产物改为入库**
+  （.gitignore 已移除 `lib/`；`*.tsbuildinfo` 仍忽略），GitHub 安装零构建即用。
+  **维护铁律：改动 `src/**` 后必须 `pnpm build`，并把更新后的 `lib/` 与源码一起 commit**，
+  否则 GitHub 安装会装到旧产物；`link:` 本地形态无此要求（直连工作区目录，build 即生效）。
+  症状自检法：`ls ~/.dsh/profiles/desktop/node_modules/dsh-client-ui-taskboard` 里没有 `lib/`，
+  就是装到了不含产物的源码版本。
 - API：`GET /workspaces`、`GET /board?ws=`、`PUT /board?ws=`（expectedRevision 整板 CAS；坏 JSON 拒绝覆盖；
   删阶段时阶段内仍有事项则阻止）；另 `GET /health`。
 - 工作区枚举：宿主 sessions 服务 cwd ∪ `~/.dsh/storages/session_projcache/sessions/*.json` 的 `record.identity.cwd` 去重。
