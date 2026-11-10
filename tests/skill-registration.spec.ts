@@ -75,4 +75,27 @@ describe('registerBoardSkill', () => {
     const skills: SkillsFace = { register: () => 'not-a-function' }
     expect(registerBoardSkill(skills, () => {})).toEqual({ status: 'registered', disposer: undefined })
   })
+
+  it('unwraps a cordis traceable proxy so the real instance is the receiver', () => {
+    const ORIGINAL = Symbol.for('cordis.original')
+    const calls: Array<unknown> = []
+    const realService = {
+      register(this: { id?: string }, skill: RuntimeSkillFace) {
+        calls.push(this)
+        return undefined
+      },
+      id: 'real-registry',
+    }
+    // Mimic the host's traceable proxy: method access rebinds `this` to a shadow context.
+    const proxy = new Proxy(realService, {
+      get: (target, prop) => {
+        if (prop === ORIGINAL) return target
+        return (target as Record<string | symbol, unknown>)[prop]
+      },
+    }) as unknown as SkillsFace
+    const outcome = registerBoardSkill(proxy, () => {})
+    expect(outcome).toEqual({ status: 'registered', disposer: undefined })
+    expect(calls[0]).toBe(realService)
+    expect((calls[0] as { id?: string }).id).toBe('real-registry')
+  })
 })

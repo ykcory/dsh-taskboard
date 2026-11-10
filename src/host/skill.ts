@@ -30,6 +30,22 @@ export interface SkillsFace {
   register?: (skill: RuntimeSkillFace) => unknown
 }
 
+/**
+ * Cordis traceable service proxies expose the unwrapped instance via this
+ * symbol. Calling methods through the proxy rebinds `this` to a shadow
+ * context, and the registry's `register()` reads `this.ctx` first — through
+ * the proxy that is `undefined` (verified in production: "Cannot read
+ * properties of undefined (reading 'ctx')" at SkillRegistry.register).
+ * Unwrapping restores the real instance as the receiver.
+ */
+const CORDIS_ORIGINAL = Symbol.for('cordis.original')
+
+/** Unwrap a cordis traceable proxy to the real service instance (identity for plain objects). */
+function unwrapService(skills: SkillsFace): SkillsFace {
+  const original = (skills as Record<symbol, unknown>)[CORDIS_ORIGINAL]
+  return typeof original === 'object' && original !== null ? (original as SkillsFace) : skills
+}
+
 /** Stable skill name (official grammar, lowercase kebab). */
 export const TASKBOARD_SKILL_NAME = 'taskboard'
 
@@ -80,10 +96,12 @@ export function registerBoardSkill(
   skills: SkillsFace | undefined,
   warn: (message: string) => void,
 ): SkillRegistrationOutcome {
-  const register = skills?.register
+  if (skills === undefined) return { status: 'service-missing' }
+  const service = unwrapService(skills)
+  const register = service.register
   if (typeof register !== 'function') return { status: 'service-missing' }
   try {
-    const result: unknown = register(TASKBOARD_SKILL)
+    const result: unknown = register.call(service, TASKBOARD_SKILL)
     return { status: 'registered', disposer: typeof result === 'function' ? (result as () => void) : undefined }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
