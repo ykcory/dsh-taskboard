@@ -19,7 +19,7 @@ import type { UserConfig } from 'tsdown'
 import { transform } from 'lightningcss'
 
 /** Package name, stamped into the module-loader handoff and the style tags. */
-const ID = '@linxin666/dsh-client-ui-taskboard'
+const ID = 'dsh-client-ui-taskboard'
 
 /** Package root (this config lives at the repo root). */
 const REPOSITORY_ROOT = fileURLToPath(new URL('.', import.meta.url))

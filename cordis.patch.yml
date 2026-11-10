@@ -11,4 +11,4 @@
 # package name.
 - insert:
     - id: ui-taskboard
-      name: '@linxin666/dsh-client-ui-taskboard'
+      name: 'dsh-client-ui-taskboard'

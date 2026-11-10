@@ -126,12 +126,20 @@ ardot MCP 在 `http://127.0.0.1:50501/api/v1/mcp`（本机 ardot 应用）。改
 
 ## Phase 1 实现要点（已完成）
 
-- 插件名 `@linxin666/dsh-client-ui-taskboard`：宿主 cordis 插件注册 `/api/dsh-taskboard/*`（loopback 围栏），
-  客户端注册右侧栏页签类型 + guide 卡片；TS + React 18 + TailwindCSS + tsdown + vitest；
-  经 `plugin_manager` 本地 link 安装（行 id `ui-taskboard`）。
+- 插件包名 `dsh-client-ui-taskboard`（2026-11-10 由 `@linxin666/dsh-client-ui-taskboard` 去 scope 改名，
+  package.json / cordis.patch.yml / tsdown ID / mountOnce / TASKBOARD_TAB_ID 五处同步）：宿主 cordis 插件注册
+  `/api/dsh-taskboard/*`（loopback 围栏），客户端注册右侧栏页签类型 + guide 卡片；
+  TS + React 18 + TailwindCSS + tsdown + vitest；经 `plugin_manager` 本地 link 安装（行 id `ui-taskboard`）。
 - 行 id 必须写成 `ui-taskboard`（无内连字符），避免与家族聚合行 `ui-task-board`
   （`@linxin666/dsh-client-ui-task-board`，另一插件）在 loader 全局 id 空间里撞车；行 `name` 必须恰等于包名，
   否则 `dsh-client-modules` 不会把浏览器半区挂上。
+- **插件列表显示名走 locale 多语言（2026-11-10 查证）**：管理页/设置页的显示名读插件导出的 `locale/*.json`
+  里 `meta.title`/`meta.description`（`LocalizedText`，按界面语言选取，en 必备回退；缺失才回退 `package.json`
+  的 `name`）。zh/en 均已写好：「任务看板」/ "Taskboard"；exports 用官方通配写法
+  `"./locale/*.json": "./locale/*.json"`。包名本身是技术身份，无多语言，原样显示。
+- **安装形态教训（2026-11-10）**：曾以 GitHub 依赖 `github:ykcory/dsh-taskboard` 装进 desktop profile——
+  仓库不提交 `lib/` 产物且无 prepare 脚本，装出来没有构建产物、行被禁用、显示名回退包名。
+  已 remove 并改用 `link:` 本地目录安装（enabled）。除非仓库加 prepare 构建链，否则别用 git 依赖形态装本插件。
 - API：`GET /workspaces`、`GET /board?ws=`、`PUT /board?ws=`（expectedRevision 整板 CAS；坏 JSON 拒绝覆盖；
   删阶段时阶段内仍有事项则阻止）；另 `GET /health`。
 - 工作区枚举：宿主 sessions 服务 cwd ∪ `~/.dsh/storages/session_projcache/sessions/*.json` 的 `record.identity.cwd` 去重。

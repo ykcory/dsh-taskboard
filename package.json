@@ -1,5 +1,5 @@
 {
-  "name": "@linxin666/dsh-client-ui-taskboard",
+  "name": "dsh-client-ui-taskboard",
   "description": "DSH taskboard: per-workspace milestone kanban (epics, tasks, custom colored stages) stored as <workspace>/.dsh/taskboard/board.json; editable in the panel or by agents through the file.",
   "version": "0.1.0",
   "icon": "icon.svg",
@@ -16,8 +16,7 @@
       "default": "./lib/client.js"
     },
     "./src/*": "./src/*",
-    "./locale/en.json": "./locale/en.json",
-    "./locale/zh.json": "./locale/zh.json",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "dsh": {

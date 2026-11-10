@@ -24,7 +24,7 @@ import { GuideArtworkTaskboard } from './view/GuideArtwork.tsx'
 import { TaskboardPanel } from './view/TaskboardPanel.tsx'
 
 /** Implementation identity of this tab type (unique across every registration). */
-export const TASKBOARD_TAB_ID = '@linxin666/dsh-client-ui-taskboard'
+export const TASKBOARD_TAB_ID = 'dsh-client-ui-taskboard'
 
 /** Type discriminator: what the tabs of this type are, and what `openTab` names. */
 export const TASKBOARD_TAB_KIND = 'taskboard'
