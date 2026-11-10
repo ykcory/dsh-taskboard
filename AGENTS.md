@@ -12,7 +12,8 @@
 - 工具行右对齐已按**节点树实测坐标**修复：四帧按钮组右缘均 = 1501.0（内容区右缘，零偏差）。
   特写图：`design/screenshots/toolbar-closeup-v6.png`。
 - **Phase 1 插件实现**：已完成（2026-11-10）。宿主路由、看板 UI、CAS 写入、删除防护、92 项单测全部就绪，
-  已 link 安装到 desktop profile 且行 `ui-taskboard` 为 enabled/active。**需用户重启 DSH 服务后右侧栏开始页才会出现卡片。**
+  已以 GitHub 依赖 `github:ykcory/dsh-taskboard` 形态装进 desktop profile（`lib/` 入库后安装可用，
+  见「安装形态」条目），行 `ui-taskboard` 为 enabled。**需用户重启 DSH 服务后右侧栏开始页才会出现卡片。**
 
 ## 入口形态（用户 2026-11-10 定稿）
 
