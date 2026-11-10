@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>任务看板设计稿</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1549px; height: 875px; overflow: hidden; }
+body {
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+  background: #ffffff;
+}
+/* 页面包裹层：四周 24px 间隙 */
+.page {
+  width: 1549px; height: 875px; padding: 24px;
+  display: flex; flex-direction: column; position: relative;
+}
+/* 工具行：里程碑页签在左；「添加阶段」「新建事项」按钮组右对齐（贴内容区右缘） */
+.toolbar { display: flex; flex-direction: row; align-items: center; justify-content: space-between; height: 36px; }
+.toolbar .tabs-group { display: flex; flex-direction: row; align-items: center; gap: 10px; }
+.toolbar .actions-group { display: flex; flex-direction: row; align-items: center; gap: 10px; }
+.tab {
+  background: #f2f3f5; color: #4a4d52; font-size: 13px; font-weight: 500;
+  border-radius: 999px; padding: 8px 16px;
+}
+.tab.active { background: #1c1e21; color: #ffffff; }
+.tab-add { background: #f2f3f5; color: #9aa0a8; font-size: 15px; border-radius: 999px; padding: 6px 14px; }
+.btn-stage {
+  background: #ffffff; border: 1px solid #e3e5e8; color: #4a4d52;
+  font-size: 13px; font-weight: 500; border-radius: 999px; padding: 8px 16px;
+  display: flex; flex-direction: row; align-items: center; gap: 6px;
+}
+.btn-new {
+  background: #1c1e21; color: #ffffff; font-size: 13px; font-weight: 500;
+  border-radius: 999px; padding: 9px 18px; display: flex; align-items: center;
+}
+.board { display: flex; flex-direction: row; gap: 14px; height: 733px; margin-top: 14px; }
+.column { flex: 1; border-radius: 12px; display: flex; flex-direction: column; min-height: 0; overflow: visible; position: relative; }
+.col-head { display: flex; flex-direction: row; align-items: center; padding: 14px 14px 10px; gap: 8px; }
+/* 阶段色块：20px 圆 + 白色调色图标，示意可点击改色 */
+.chip { width: 20px; height: 20px; border-radius: 999px; display: flex; flex-direction: row; align-items: center; justify-content: center; }
+.chip svg { display: block; }
+.col-name { font-size: 13px; font-weight: 600; color: #2f3237; }
+.col-count { font-size: 12px; color: #9aa0a8; }
+/* 列头添加按钮：24px 圆形描边按钮 */
+.col-add {
+  margin-left: auto; width: 24px; height: 24px; border-radius: 999px;
+  background: #ffffff; border: 1px solid rgba(0,0,0,0.10);
+  display: flex; flex-direction: row; align-items: center; justify-content: center;
+}
+.col-add svg { display: block; }
+.col-body { display: flex; flex-direction: column; gap: 10px; padding: 0 10px 10px; overflow: hidden; flex: 1; min-height: 0; }
+.card {
+  background: #ffffff; border: 1px solid rgba(0,0,0,0.06); border-radius: 10px;
+  padding: 12px 12px; font-size: 13px; line-height: 1.55; color: #33363b;
+}
+/* 空阶段：只展示说明文字 */
+.col-empty { flex: 1; display: flex; flex-direction: row; align-items: center; justify-content: center; font-size: 12px; color: #b0b6bd; }
+/* 阶段色板 popover：点列头色块弹出（改色；含删除阶段） */
+.pop {
+  position: absolute; top: 44px; left: 12px; background: #ffffff; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15); padding: 12px 12px 8px; z-index: 5;
+  display: flex; flex-direction: column; gap: 10px; width: 236px;
+}
+.pop .colors { display: flex; flex-direction: row; gap: 9px; }
+.pop .opt { width: 18px; height: 18px; border-radius: 999px; }
+.pop .opt.selected { box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #1c1e21; }
+.pop .del { font-size: 12px; color: #e05252; }
+.overlay { position: absolute; left: 0; top: 0; width: 1549px; height: 875px; background: rgba(15,17,20,0.4); display: flex; align-items: center; justify-content: center; }
+.modal { background: #ffffff; border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.18); }
+.modal-head { display: flex; flex-direction: row; align-items: center; justify-content: space-between; padding: 18px 20px 14px; }
+.modal-title { font-size: 15px; font-weight: 600; color: #1e2126; }
+.modal-close { font-size: 16px; color: #9aa0a8; }
+.modal-body { padding: 2px 20px 6px; display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 8px; }
+.label { font-size: 13px; color: #4a4d52; }
+.input, .select {
+  height: 40px; border: 1px solid #e3e5e8; border-radius: 8px; padding: 0 12px;
+  font-size: 13px; color: #33363b; display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+}
+.input .ph { color: #b3b8bf; }
+.modal-foot { display: flex; flex-direction: row; justify-content: flex-end; gap: 10px; padding: 14px 20px 20px; }
+.btn { border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 500; }
+.btn-secondary { background: #f2f3f5; color: #3a3d42; }
+.btn-primary { background: #1c1e21; color: #ffffff; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="toolbar">
+  <div class="tabs-group">
+    <div class="tab">M0</div>
+    <div class="tab active">M1</div>
+    <div class="tab">M2</div>
+    <div class="tab">M3</div>
+    <div class="tab-add">+</div>
+  </div>
+  <div class="actions-group">
+    <div class="btn-stage"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2.2 V9.8 M2.2 6 H9.8" stroke="#6b7076" stroke-width="1.4" stroke-linecap="round"/></svg><span>添加阶段</span></div>
+    <div class="btn-new">新建事项</div>
+  </div>
+</div>
+  <div class="board">
+  <div class="column" style="background:#f1f2f4">
+  <div class="col-head">
+    <div class="chip" style="background:#7d8b99"><svg width="10" height="10" viewBox="0 0 12 12"><path d="M6 1.2 C6 1.2 2.4 5.4 2.4 8 a3.6 3.6 0 0 0 7.2 0 C9.6 5.4 6 1.2 6 1.2 Z" fill="#ffffff"/></svg></div>
+    <div class="col-name">初始化</div>
+    <div class="col-count">8</div>
+    <div class="col-add"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2.2 V9.8 M2.2 6 H9.8" stroke="#4a4d52" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="col-body">
+    <div class="card">M1 进货单 / 销售单（审核驱动库存与移动加权成本）</div>
+    <div class="card">M1 其他出入库 / 调拨 / 盘点</div>
+    <div class="card">M1 收款单 / 付款单 / 其他收支</div>
+    <div class="card">M1 即时库存 / 库存流水 / 进销存汇总（替换 mock 与假数据）</div>
+    <div class="card">M1 应收应付明细与汇总</div>
+    <div class="card">M1 打印模板（销售单 / 进货单 A4 与针式小票）</div>
+    <div class="card">M1 客户预存（充值 / 额度账 / 流水，fin_prepay）</div>
+    <div class="card">M1 平台侧账套备份下载 / 恢复上传</div>
+  </div>
+  
+</div>
+<div class="column" style="background:#fdf3df">
+  <div class="col-head">
+    <div class="chip" style="background:#e2a53d"><svg width="10" height="10" viewBox="0 0 12 12"><path d="M6 1.2 C6 1.2 2.4 5.4 2.4 8 a3.6 3.6 0 0 0 7.2 0 C9.6 5.4 6 1.2 6 1.2 Z" fill="#ffffff"/></svg></div>
+    <div class="col-name">执行中</div>
+    <div class="col-count">1</div>
+    <div class="col-add"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2.2 V9.8 M2.2 6 H9.8" stroke="#4a4d52" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="col-body">
+    <div class="card">M1 单据审核流转联调（审核驱动库存与成本）</div>
+  </div>
+  
+</div>
+<div class="column" style="background:#e7f4e6">
+  <div class="col-head">
+    <div class="chip" style="background:#3fa455"><svg width="10" height="10" viewBox="0 0 12 12"><path d="M6 1.2 C6 1.2 2.4 5.4 2.4 8 a3.6 3.6 0 0 0 7.2 0 C9.6 5.4 6 1.2 6 1.2 Z" fill="#ffffff"/></svg></div>
+    <div class="col-name">待审核</div>
+    <div class="col-count">2</div>
+    <div class="col-add"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2.2 V9.8 M2.2 6 H9.8" stroke="#4a4d52" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="col-body">
+    <div class="card">M1 期初建账 + 期初应收应付接口</div>
+    <div class="card">M1 进销存汇总报表导出（A4）</div>
+  </div>
+  
+</div>
+<div class="column" style="background:#e4e9f8">
+  <div class="col-head">
+    <div class="chip" style="background:#4a72d8"><svg width="10" height="10" viewBox="0 0 12 12"><path d="M6 1.2 C6 1.2 2.4 5.4 2.4 8 a3.6 3.6 0 0 0 7.2 0 C9.6 5.4 6 1.2 6 1.2 Z" fill="#ffffff"/></svg></div>
+    <div class="col-name">已完成</div>
+    <div class="col-count">1</div>
+    <div class="col-add"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2.2 V9.8 M2.2 6 H9.8" stroke="#4a4d52" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="col-body">
+    <div class="card">M1 工程骨架与仓库初始化（api / web 拆分）</div>
+  </div>
+  
+</div>
+<div class="column" style="background:#fdeaea">
+  <div class="col-head">
+    <div class="chip" style="background:#e05252"><svg width="10" height="10" viewBox="0 0 12 12"><path d="M6 1.2 C6 1.2 2.4 5.4 2.4 8 a3.6 3.6 0 0 0 7.2 0 C9.6 5.4 6 1.2 6 1.2 Z" fill="#ffffff"/></svg></div>
+    <div class="col-name">失败</div>
+    <div class="col-count">0</div>
+    <div class="col-add"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 2.2 V9.8 M2.2 6 H9.8" stroke="#4a4d52" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="col-body">
+    <div class="col-empty">此阶段暂无事项</div>
+  </div>
+  
+</div>
+</div>
+  <div class="overlay">
+  <div class="modal" style="width: 440px;">
+    <div class="modal-head">
+      <div class="modal-title">新建事项</div>
+      <div class="modal-close">×</div>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <div class="label">事项标题</div>
+        <div class="input"><span class="ph">事项标题</span></div>
+      </div>
+      <div class="field">
+        <div class="label">所属阶段</div>
+        <div class="select">
+          <span style="display:flex; flex-direction:row; align-items:center; gap:8px;"><span class="chip" style="background:#7d8b99;"><svg width="10" height="10" viewBox="0 0 12 12"><path d="M6 1.2 C6 1.2 2.4 5.4 2.4 8 a3.6 3.6 0 0 0 7.2 0 C9.6 5.4 6 1.2 6 1.2 Z" fill="#ffffff"/></svg></span><span>初始化</span></span>
+          <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5 L5 6.5 L8 3.5" fill="none" stroke="#6b7076" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="btn btn-secondary">取消</div>
+      <div class="btn btn-primary">创建</div>
+    </div>
+  </div>
+</div>
+</div>
+</body>
+</html>

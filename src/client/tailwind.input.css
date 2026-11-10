@@ -1,0 +1,13 @@
+/*
+ * Tailwind CSS entry for the taskboard client panel. The build script
+ * compiles this file (scanning the client sources for utility candidates)
+ * into src/client/tailwind.gen.css, which the client bundle inlines as one
+ * <style data-plugin> tag.
+ *
+ * The design is a light theme on white: utility classes carry layout and
+ * typography, while data-driven colors (stage dots and tinted columns) are
+ * inline styles computed from board data.
+ */
+@import "tailwindcss";
+
+@source "./";
