@@ -33,6 +33,8 @@ export interface BoardRoutesDeps {
     } | {
         error: string;
     }>;
+    /** Skill registration outcome, for diagnosing the agent-facing skill from outside. */
+    skillStatus(): string;
     /** Logger. */
     logger: {
         warn(error: unknown): void;

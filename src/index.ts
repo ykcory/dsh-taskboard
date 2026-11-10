@@ -91,19 +91,24 @@ function applyImpl(ctx: Context, config?: Config): void {
    */
   const resolveWorkspace = resolveRequestedWorkspace
 
+  /** Skill registration outcome, read by the health route for outside diagnosis. */
+  let skillStatus = 'not-applied'
+
   const routes = makeRoutes(hostCtx, {
     sessionCwds,
     projcacheCwds: () => readProjcacheCwds(dshHome),
     resolveWorkspace,
     saveBoard: (workspace, expectedRevision, board) => saveBoard(workspace, expectedRevision, board),
     readOrInitBoard: (workspace) => readOrInitBoard(workspace),
+    skillStatus: () => skillStatus,
     logger: { warn: (error) => ctx.logger.warn(error) },
   })
   ctx.effect(() => {
-    const skillDisposer = registerBoardSkill(hostCtx.skills, (message) => ctx.logger.warn(message))
+    const outcome = registerBoardSkill(hostCtx.skills, (message) => ctx.logger.warn(message))
+    skillStatus = outcome.status === 'failed' ? `failed: ${outcome.error}` : outcome.status
     const disposers = routes.map((route) => hostCtx.webServer.register(route))
     return () => {
-      skillDisposer?.()
+      if (outcome.status === 'registered') outcome.disposer?.()
       for (const dispose of disposers) dispose()
     }
   }, 'taskboard: routes and skill')

@@ -15,6 +15,11 @@ export interface RuntimeSkillFace {
     name: string;
     /** Catalog summary the agent sees without loading the skill; carries the trigger words. */
     description: string;
+    /**
+     * Origin bucket (`SkillSource`); official docs make it REQUIRED on a
+     * registration (only `invocation`/`provider` are optional) and prompt-visible.
+     */
+    source: 'runtime';
     /** Full instructions handed to the agent when the skill is invoked. */
     content: string;
 }
@@ -30,13 +35,23 @@ export declare const TASKBOARD_SKILL_NAME = "taskboard";
  * corrupt-JSON refusal) — update both sides together.
  */
 export declare const TASKBOARD_SKILL: RuntimeSkillFace;
+/** Outcome of one registration attempt (surfaced on the health route for diagnosis). */
+export type SkillRegistrationOutcome = {
+    status: 'registered';
+    disposer?: () => void;
+} | {
+    status: 'service-missing';
+} | {
+    status: 'failed';
+    error: string;
+};
 /**
  * Register the skill into the host skills service. Defensive by design: the
  * inject list guarantees the service at apply time, but a degraded registry
  * (missing register, throwing call) must never take the board routes down
- * with it.
+ * with it — the outcome is reported instead.
  * @param skills - the skills service face (may be undefined).
  * @param warn - sink for registration failures (plugin logger).
- * @returns the service disposer, or undefined when registration did not happen.
+ * @returns what happened, including the service disposer when registered.
  */
-export declare function registerBoardSkill(skills: SkillsFace | undefined, warn: (message: string) => void): (() => void) | undefined;
+export declare function registerBoardSkill(skills: SkillsFace | undefined, warn: (message: string) => void): SkillRegistrationOutcome;

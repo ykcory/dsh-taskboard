@@ -16,6 +16,11 @@ export interface RuntimeSkillFace {
   name: string
   /** Catalog summary the agent sees without loading the skill; carries the trigger words. */
   description: string
+  /**
+   * Origin bucket (`SkillSource`); official docs make it REQUIRED on a
+   * registration (only `invocation`/`provider` are optional) and prompt-visible.
+   */
+  source: 'runtime'
   /** Full instructions handed to the agent when the skill is invoked. */
   content: string
 }
@@ -35,6 +40,7 @@ export const TASKBOARD_SKILL_NAME = 'taskboard'
  */
 export const TASKBOARD_SKILL: RuntimeSkillFace = {
   name: TASKBOARD_SKILL_NAME,
+  source: 'runtime',
   description:
     '操作本工作区的任务看板（任务看板面板的数据文件，存于 <工作区>/.dsh/taskboard/board.json）。' +
     '当用户要求更新任务、新增/移动/删除事项、调整里程碑或阶段、改看板排序，或提到任务看板、board.json 时使用。',
@@ -55,26 +61,33 @@ export const TASKBOARD_SKILL: RuntimeSkillFace = {
 - 面板不轮询文件：直接改文件后，面板需重新加载才可见。`,
 }
 
+/** Outcome of one registration attempt (surfaced on the health route for diagnosis). */
+export type SkillRegistrationOutcome =
+  | { status: 'registered'; disposer?: () => void }
+  | { status: 'service-missing' }
+  | { status: 'failed'; error: string }
+
 /**
  * Register the skill into the host skills service. Defensive by design: the
  * inject list guarantees the service at apply time, but a degraded registry
  * (missing register, throwing call) must never take the board routes down
- * with it.
+ * with it — the outcome is reported instead.
  * @param skills - the skills service face (may be undefined).
  * @param warn - sink for registration failures (plugin logger).
- * @returns the service disposer, or undefined when registration did not happen.
+ * @returns what happened, including the service disposer when registered.
  */
 export function registerBoardSkill(
   skills: SkillsFace | undefined,
   warn: (message: string) => void,
-): (() => void) | undefined {
+): SkillRegistrationOutcome {
   const register = skills?.register
-  if (typeof register !== 'function') return undefined
+  if (typeof register !== 'function') return { status: 'service-missing' }
   try {
     const result: unknown = register(TASKBOARD_SKILL)
-    return typeof result === 'function' ? (result as () => void) : undefined
+    return { status: 'registered', disposer: typeof result === 'function' ? (result as () => void) : undefined }
   } catch (error) {
-    warn(`taskboard skill registration failed: ${error instanceof Error ? error.message : String(error)}`)
-    return undefined
+    const message = error instanceof Error ? error.message : String(error)
+    warn(`taskboard skill registration failed: ${message}`)
+    return { status: 'failed', error: message }
   }
 }

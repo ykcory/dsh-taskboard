@@ -35,6 +35,8 @@ export interface BoardRoutesDeps {
   saveBoard(workspace: string, expectedRevision: number, board: unknown): Promise<BoardSave>
   /** Default-board create-on-read. */
   readOrInitBoard(workspace: string): Promise<{ board: unknown; created: boolean } | { error: string }>
+  /** Skill registration outcome, for diagnosing the agent-facing skill from outside. */
+  skillStatus(): string
   /** Logger. */
   logger: { warn(error: unknown): void }
 }
@@ -129,7 +131,7 @@ export function makeRoutes(ctx: Context, deps: BoardRoutesDeps): WebRoute[] {
       path: ROUTES.health,
       handler: async (req, res) => {
         if (!guard(req, res)) return
-        writeJson(res, 200, { ok: true, plugin: 'taskboard' })
+        writeJson(res, 200, { ok: true, plugin: 'taskboard', skill: deps.skillStatus() })
       },
     },
   ]

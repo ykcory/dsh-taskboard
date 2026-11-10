@@ -37,8 +37,9 @@ describe('TASKBOARD_SKILL', () => {
     expect(content).toContain('[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
   })
 
-  it('keeps the field set to what validateRuntimeSkill accepts', () => {
-    expect(Object.keys(TASKBOARD_SKILL).sort()).toEqual(['content', 'description', 'name'])
+  it('keeps the field set to the official SkillRegistration shape', () => {
+    expect(Object.keys(TASKBOARD_SKILL).sort()).toEqual(['content', 'description', 'name', 'source'])
+    expect(TASKBOARD_SKILL.source).toBe('runtime')
   })
 })
 
@@ -47,26 +48,26 @@ describe('registerBoardSkill', () => {
     const disposer = vi.fn()
     const register = vi.fn((skill: RuntimeSkillFace) => disposer)
     const skills: SkillsFace = { register }
-    expect(registerBoardSkill(skills, () => {})).toBe(disposer)
+    expect(registerBoardSkill(skills, () => {})).toEqual({ status: 'registered', disposer })
     expect(register).toHaveBeenCalledOnce()
     expect(register.mock.calls[0]?.[0]).toBe(TASKBOARD_SKILL)
   })
 
-  it('returns undefined without calling anything when the service is absent', () => {
-    expect(registerBoardSkill(undefined, () => {})).toBeUndefined()
-    expect(registerBoardSkill({}, () => {})).toBeUndefined()
+  it('reports service-missing without calling anything when the service is absent', () => {
+    expect(registerBoardSkill(undefined, () => {})).toEqual({ status: 'service-missing' })
+    expect(registerBoardSkill({}, () => {})).toEqual({ status: 'service-missing' })
   })
 
-  it('degrades to undefined with a warning when registration throws', () => {
+  it('degrades to failed with a warning when registration throws', () => {
     const warn = vi.fn()
     const skills: SkillsFace = { register: () => { throw new Error('registry closed') } }
-    expect(registerBoardSkill(skills, warn)).toBeUndefined()
+    expect(registerBoardSkill(skills, warn)).toEqual({ status: 'failed', error: 'registry closed' })
     expect(warn).toHaveBeenCalledOnce()
     expect(String(warn.mock.calls[0]?.[0])).toContain('registry closed')
   })
 
-  it('tolerates a service that returns no disposer', () => {
+  it('registers cleanly when the service returns no disposer', () => {
     const skills: SkillsFace = { register: () => 'not-a-function' }
-    expect(registerBoardSkill(skills, () => {})).toBeUndefined()
+    expect(registerBoardSkill(skills, () => {})).toEqual({ status: 'registered', disposer: undefined })
   })
 })
