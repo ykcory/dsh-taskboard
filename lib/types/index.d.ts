@@ -19,6 +19,16 @@ export interface Config {
     dshHome?: string;
 }
 /**
+ * Resolve the workspace one request addresses: the explicit ws override,
+ * strictly normalized. There is NO default — a request without a usable ws
+ * is refused by the route (400), because the panel and every agent caller
+ * name the workspace they mean; guessing one (first session, process cwd)
+ * silently read and wrote a foreign workspace's board.
+ * @param override - the request's ws parameter.
+ * @returns the absolute workspace root, or undefined when absent/unusable.
+ */
+export declare function resolveRequestedWorkspace(override: string | undefined): string | undefined;
+/**
  * Mount the board routes.
  * @param ctx - host plugin context carrying webServer/sessions.
  * @param config - resolved plugin config.

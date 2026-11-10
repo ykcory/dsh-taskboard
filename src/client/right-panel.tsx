@@ -15,7 +15,7 @@
  * the GUI down.
  */
 
-import type { ComponentType, ReactElement } from 'react'
+import { useEffect, type ComponentType, type ReactElement } from 'react'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { BoardApi } from './api.ts'
 import type { TaskboardController } from './controller.ts'
@@ -71,6 +71,26 @@ export interface TaskboardTabFace {
   controller: TaskboardController
   api: BoardApi
 }
+
+/**
+ * The session standard kit the framework adds to a `scope: 'session'` slot
+ * body (ui-session's `SessionStandardProps` + `GlobalStandardProps`,
+ * structural slice — the same source the shipped files tab reads its
+ * workspace root from). A shell always provides both for a session-scoped
+ * key; they stay optional here so a shape drift degrades to the status line
+ * instead of a crash.
+ */
+interface SessionStandardFace {
+  /** The framework-resolved id of the session this tab occurrence is in. */
+  sessionId: string
+  /** Session-list selector hook; every list row carries the session's cwd. */
+  useSessions: <Selected>(
+    selector: (sessions: { byId: Record<string, { cwd?: string | undefined } | undefined> }) => Selected,
+  ) => Selected
+}
+
+/** Absent-kit stand-in keeping the hook call order fixed: reads nothing. */
+const useSessionsAbsent: SessionStandardFace['useSessions'] = () => undefined as never
 
 /**
  * Register the taskboard's tab type, its guide card, and its tab body/title.
@@ -146,8 +166,34 @@ export function registerTaskboardTab(ctx: ClientContext, controller: TaskboardCo
   }
 }
 
-/** The docked tab body: the board page itself. */
-function TaskboardTabBody({ controller }: TaskboardTabFace): ReactElement {
+/**
+ * The docked tab body: resolve the session's workspace root from the
+ * framework session list (exactly the shipped files tab's read:
+ * `useSessions(s => s.byId[sessionId]?.cwd)`), load that workspace's board,
+ * and re-load when the session switch changes the root. Without a resolved
+ * root the body shows the status line — the board is never loaded against a
+ * guessed workspace (the host refuses a ws-less read anyway).
+ */
+function TaskboardTabBody(props: TaskboardTabFace & Partial<SessionStandardFace>): ReactElement | null {
+  const { controller, sessionId, useSessions } = props
+  const sessions = useSessions ?? useSessionsAbsent
+  const workspace = sessions((list) => (sessionId === undefined ? undefined : list.byId[sessionId]?.cwd))
+
+  useEffect(() => {
+    if (workspace === undefined) return
+    void controller.load(workspace)
+  }, [controller, workspace])
+
+  if (workspace === undefined) {
+    return (
+      <div
+        className="flex h-full items-center justify-center px-6 text-[12px] text-[#b0b6bd]"
+        data-dsh-part="taskboard-no-workspace"
+      >
+        {t('status.noWorkspace')}
+      </div>
+    )
+  }
   return <TaskboardPanel controller={controller} />
 }
 

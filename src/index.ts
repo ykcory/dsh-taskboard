@@ -40,6 +40,20 @@ export interface Config {
 }
 
 /**
+ * Resolve the workspace one request addresses: the explicit ws override,
+ * strictly normalized. There is NO default — a request without a usable ws
+ * is refused by the route (400), because the panel and every agent caller
+ * name the workspace they mean; guessing one (first session, process cwd)
+ * silently read and wrote a foreign workspace's board.
+ * @param override - the request's ws parameter.
+ * @returns the absolute workspace root, or undefined when absent/unusable.
+ */
+export function resolveRequestedWorkspace(override: string | undefined): string | undefined {
+  if (override === undefined || override.trim() === '') return undefined
+  return normalizeWorkspaceRoot(override)
+}
+
+/**
  * Mount the board routes.
  * @param ctx - host plugin context carrying webServer/sessions.
  * @param config - resolved plugin config.
@@ -64,13 +78,10 @@ function applyImpl(ctx: Context, config?: Config): void {
   }
 
   /**
-   * The workspace a request addresses: the ws override, then the active
-   * session cwd (first session), then the process cwd.
+   * The workspace a request addresses: the ws override, or nothing — the
+   * route refuses a ws-less board read/write (see resolveRequestedWorkspace).
    */
-  const resolveWorkspace = (override: string | undefined): string | undefined => {
-    if (override !== undefined && override.trim() !== '') return normalizeWorkspaceRoot(override)
-    return sessionCwds()[0] ?? process.cwd()
-  }
+  const resolveWorkspace = resolveRequestedWorkspace
 
   const routes = makeRoutes(hostCtx, {
     sessionCwds,

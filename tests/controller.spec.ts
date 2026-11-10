@@ -9,6 +9,9 @@ import { defaultBoard, type BoardFile } from '../src/core/board.ts'
 import { TaskboardController } from '../src/client/controller.ts'
 import { ApiError, type BoardApi, type BoardPayload } from '../src/client/api.ts'
 
+/** The workspace every load names (the fake echoes it as the server truth). */
+const WS = '/w/demo'
+
 /** A BoardApi double that keeps one board in memory and honors the CAS. */
 class FakeApi {
   board: BoardFile
@@ -16,6 +19,10 @@ class FakeApi {
   /** Set to make the next putBoard reject. */
   failNextPut: ApiError | undefined
   puts = 0
+  /** ws argument every getBoard received, in call order. */
+  gets: Array<string | undefined> = []
+  /** ws argument every putBoard received, in call order. */
+  putWses: Array<string | undefined> = []
 
   constructor(board: BoardFile = defaultBoard()) {
     this.board = board
@@ -29,12 +36,14 @@ class FakeApi {
     return { workspaces: [{ ...this.workspace, active: true }] }
   }
 
-  async getBoard(): Promise<BoardPayload> {
+  async getBoard(ws?: string): Promise<BoardPayload> {
+    this.gets.push(ws)
     return this.payload()
   }
 
-  async putBoard(input: { expectedRevision: number; board: BoardFile }): Promise<BoardPayload> {
+  async putBoard(input: { ws?: string; expectedRevision: number; board: BoardFile }): Promise<BoardPayload> {
     this.puts += 1
+    this.putWses.push(input.ws)
     const failure = this.failNextPut
     if (failure !== undefined) {
       this.failNextPut = undefined
@@ -54,14 +63,16 @@ function makeController(api: FakeApi): TaskboardController {
 }
 
 describe('TaskboardController load', () => {
-  it('loads the board and selects the first milestone', async () => {
+  it('loads the named workspace and selects the first milestone', async () => {
     const api = new FakeApi({ ...defaultBoard(), epics: [{ id: 'epic-a', name: 'M0' }] })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     const snapshot = controller.getSnapshot()
     expect(snapshot.phase).toBe('ready')
     expect(snapshot.workspace).toEqual({ cwd: '/w/demo', name: 'demo' })
     expect(snapshot.selectedEpicId).toBe('epic-a')
+    // The read always names the workspace; the host refuses a ws-less one.
+    expect(api.gets).toEqual([WS])
   })
 
   it('reports a load failure as a notice', async () => {
@@ -70,18 +81,50 @@ describe('TaskboardController load', () => {
       throw new ApiError(500, 'boom')
     }
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     const snapshot = controller.getSnapshot()
     expect(snapshot.phase).toBe('error')
     expect(snapshot.notice?.kind).toBe('load')
   })
+
+  it('adopts only the newest load when two workspaces race', async () => {
+    const api = new FakeApi()
+    const controller = makeController(api)
+    // A: the response arrives only after B's already landed.
+    let releaseA: (() => void) | undefined
+    api.getBoard = async (ws?: string) => {
+      if (ws === '/w/other') {
+        await new Promise<void>((resolve) => {
+          releaseA = resolve
+        })
+        return { workspace: { cwd: '/w/other', name: 'other' }, board: defaultBoard() }
+      }
+      return { workspace: { cwd: '/w/other-b', name: 'other-b' }, board: defaultBoard() }
+    }
+    const first = controller.load('/w/other')
+    const second = controller.load('/w/other-b')
+    releaseA?.()
+    await Promise.all([first, second])
+    const snapshot = controller.getSnapshot()
+    // The superseded A response must not overwrite B's adopted truth.
+    expect(snapshot.workspace?.cwd).toBe('/w/other-b')
+    expect(snapshot.phase).toBe('ready')
+  })
 })
 
 describe('TaskboardController mutations', () => {
+  it('commits against the workspace it loaded', async () => {
+    const api = new FakeApi()
+    const controller = makeController(api)
+    await controller.load(WS)
+    expect(await controller.addStage('新阶段')).toBe('ok')
+    expect(api.putWses).toEqual([WS])
+  })
+
   it('creates a milestone and selects it', async () => {
     const api = new FakeApi()
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     // A fresh board already carries M1; the new tab becomes the selected one.
     expect(await controller.createEpic('M2')).toBe('ok')
     const snapshot = controller.getSnapshot()
@@ -92,7 +135,7 @@ describe('TaskboardController mutations', () => {
   it('adds a named stage with a palette color', async () => {
     const api = new FakeApi()
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     const before = controller.getSnapshot().board?.columns.length ?? 0
     expect(await controller.addStage('审核中')).toBe('ok')
     const columns = controller.getSnapshot().board?.columns ?? []
@@ -105,7 +148,7 @@ describe('TaskboardController mutations', () => {
   it('refuses to add a stage without a name', async () => {
     const api = new FakeApi()
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     const before = controller.getSnapshot().board?.columns.length ?? 0
     expect(await controller.addStage('   ')).toBe('failed')
     expect(controller.getSnapshot().board?.columns).toHaveLength(before)
@@ -114,7 +157,7 @@ describe('TaskboardController mutations', () => {
   it('renames and recolors a stage', async () => {
     const api = new FakeApi()
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     expect(await controller.renameStage('col-init', '准备')).toBe('ok')
     expect(await controller.setStageColor('col-init', '#9a6bd8')).toBe('ok')
     const column = controller.getSnapshot().board?.columns.find((entry) => entry.id === 'col-init')
@@ -125,7 +168,7 @@ describe('TaskboardController mutations', () => {
   it('creates a task in the given stage', async () => {
     const api = new FakeApi({ ...defaultBoard(), epics: [{ id: 'epic-a', name: 'M1' }] })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     expect(await controller.createTask({ epicId: 'epic-a', columnId: 'col-init', title: ' 联调 ' })).toBe('ok')
     const task = controller.getSnapshot().board?.tasks[0]
     expect(task?.title).toBe('联调')
@@ -147,7 +190,7 @@ describe('TaskboardController mutations', () => {
       ],
     })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     const putsBefore = api.puts
     expect(await controller.editTask('task-a', { title: ' 甲改 ', columnId: 'col-doing' })).toBe('ok')
     expect(api.puts).toBe(putsBefore + 1)
@@ -165,7 +208,7 @@ describe('TaskboardController mutations', () => {
       tasks: [{ id: 'task-a', epicId: 'epic-a', columnId: 'col-init', title: '甲', createdAt: 1 }],
     })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     const putsBefore = api.puts
     expect(await controller.editTask('task-a', { title: '   ' })).toBe('failed')
     expect(await controller.editTask('task-a', { columnId: 'col-x' })).toBe('failed')
@@ -180,7 +223,7 @@ describe('TaskboardController mutations', () => {
       tasks: [{ id: 'task-a', epicId: 'epic-a', columnId: 'col-init', title: '甲', createdAt: 1 }],
     })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     const putsBefore = api.puts
     expect(await controller.editTask('task-a', { title: '甲', columnId: 'col-init' })).toBe('ok')
     expect(api.puts).toBe(putsBefore)
@@ -196,7 +239,7 @@ describe('TaskboardController mutations', () => {
       ],
     })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     expect(await controller.removeTask('task-x')).toBe('failed')
     expect(await controller.removeTask('task-a')).toBe('ok')
     expect(controller.getSnapshot().board?.tasks.map((task) => task.id)).toEqual(['task-b'])
@@ -213,7 +256,7 @@ describe('TaskboardController mutations', () => {
       tasks: [{ id: 'task-a', epicId: 'epic-a', columnId: 'col-init', title: '事项', createdAt: 1 }],
     })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     expect(await controller.moveTask('task-a', 'col-doing')).toBe('ok')
     expect(controller.getSnapshot().board?.tasks[0]?.columnId).toBe('col-doing')
   })
@@ -229,7 +272,7 @@ describe('TaskboardController mutations', () => {
       ],
     })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     expect(await controller.moveTask('task-a', 'col-init', 2)).toBe('ok')
     expect(controller.getSnapshot().board?.tasks.map((task) => task.id)).toEqual(['task-b', 'task-c', 'task-a'])
     const putsAfterReorder = api.puts
@@ -252,7 +295,7 @@ describe('TaskboardController mutations', () => {
       ],
     })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     expect(await controller.moveTask('task-a', 'col-doing', 1)).toBe('ok')
     expect(controller.getSnapshot().board?.tasks.filter((task) => task.columnId === 'col-doing').map((task) => task.id)).toEqual([
       'task-b',
@@ -264,7 +307,7 @@ describe('TaskboardController mutations', () => {
   it('reorders stage columns and skips the round-trip on a no-op', async () => {
     const api = new FakeApi()
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     expect(await controller.moveStage('col-done', 0)).toBe('ok')
     expect(controller.getSnapshot().board?.columns.map((column) => column.id)).toEqual([
       'col-done',
@@ -285,7 +328,7 @@ describe('TaskboardController mutations', () => {
       tasks: [{ id: 'task-a', epicId: 'epic-a', columnId: 'col-init', title: '事项', createdAt: 1 }],
     })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     const before = api.puts
     expect(await controller.removeStage('col-init')).toBe('blocked')
     expect(api.puts).toBe(before)
@@ -300,7 +343,7 @@ describe('TaskboardController mutations', () => {
       ],
     })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     expect(await controller.removeStage('col-extra')).toBe('ok')
     expect(controller.getSnapshot().board?.columns.map((column) => column.id)).not.toContain('col-extra')
   })
@@ -308,7 +351,7 @@ describe('TaskboardController mutations', () => {
   it('reloads the server truth and raises a conflict notice on 409', async () => {
     const api = new FakeApi()
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     // Another writer bumps the board behind this controller's back.
     api.board = { ...api.board, revision: 99, epics: [{ id: 'epic-other', name: 'M9' }] }
     expect(await controller.createEpic('M1')).toBe('failed')
@@ -321,7 +364,7 @@ describe('TaskboardController mutations', () => {
   it('keeps the local view and raises a save notice on other failures', async () => {
     const api = new FakeApi()
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     api.failNextPut = new ApiError(500, 'disk full')
     expect(await controller.createEpic('M2')).toBe('failed')
     const snapshot = controller.getSnapshot()
@@ -338,7 +381,7 @@ describe('TaskboardController mutations', () => {
     const unsubscribe = controller.subscribe(() => {
       calls += 1
     })
-    await controller.load()
+    await controller.load(WS)
     expect(calls).toBeGreaterThan(0)
     unsubscribe()
     const seen = calls
@@ -351,7 +394,7 @@ describe('TaskboardController milestones', () => {
   it('renames a milestone', async () => {
     const api = new FakeApi({ ...defaultBoard(), epics: [{ id: 'epic-a', name: 'M1' }] })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     expect(await controller.renameEpic('epic-a', '  里程碑一  ')).toBe('ok')
     expect(controller.getSnapshot().board?.epics[0]?.name).toBe('里程碑一')
   })
@@ -359,7 +402,7 @@ describe('TaskboardController milestones', () => {
   it('refuses to rename a milestone to an empty name', async () => {
     const api = new FakeApi({ ...defaultBoard(), epics: [{ id: 'epic-a', name: 'M1' }] })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     expect(await controller.renameEpic('epic-a', '   ')).toBe('failed')
     expect(controller.getSnapshot().board?.epics[0]?.name).toBe('M1')
   })
@@ -373,7 +416,7 @@ describe('TaskboardController milestones', () => {
       ],
     })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     controller.selectEpic('epic-b')
     expect(await controller.removeEpic('epic-b')).toBe('ok')
     const snapshot = controller.getSnapshot()
@@ -384,7 +427,7 @@ describe('TaskboardController milestones', () => {
   it('refuses to remove the last milestone', async () => {
     const api = new FakeApi({ ...defaultBoard(), epics: [{ id: 'epic-a', name: 'M1' }] })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     const before = api.puts
     expect(await controller.removeEpic('epic-a')).toBe('blocked')
     expect(api.puts).toBe(before)
@@ -401,7 +444,7 @@ describe('TaskboardController milestones', () => {
       tasks: [{ id: 'task-a', epicId: 'epic-b', columnId: 'col-init', title: '事项', createdAt: 1 }],
     })
     const controller = makeController(api)
-    await controller.load()
+    await controller.load(WS)
     const before = api.puts
     expect(await controller.removeEpic('epic-b')).toBe('blocked')
     expect(api.puts).toBe(before)

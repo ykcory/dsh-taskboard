@@ -134,10 +134,8 @@ export function TaskboardPanel({ controller }: { controller: TaskboardController
   const epicMenuRef = useDismissOnOutside(epicMenu !== null, closeEpicMenu)
   const taskMenuRef = useDismissOnOutside(taskMenu !== null, closeTaskMenu)
 
-  // A docked tab mounts its body on first reveal; load once.
-  useEffect(() => {
-    if (controller.getSnapshot().phase === 'idle') void controller.load()
-  }, [controller])
+  // Loading is owned by the tab body (it reads the session workspace); the
+  // panel renders whatever phase the controller is in.
 
   const board = snapshot.board
   const epics = board?.epics ?? []

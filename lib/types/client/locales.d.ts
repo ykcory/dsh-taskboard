@@ -34,6 +34,7 @@ export declare const zh: {
     readonly 'common.cancel': "取消";
     readonly 'common.create': "创建";
     readonly 'common.save': "保存";
+    readonly 'status.noWorkspace': "未获取到当前会话的工作区";
     readonly 'error.load': "看板加载失败";
     readonly 'error.conflict': "保存冲突，已重新加载";
     readonly 'error.save': "保存失败";

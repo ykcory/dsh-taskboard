@@ -149,6 +149,12 @@ ardot MCP 在 `http://127.0.0.1:50501/api/v1/mcp`（本机 ardot 应用）。改
   就是装到了不含产物的源码版本。
 - API：`GET /workspaces`、`GET /board?ws=`、`PUT /board?ws=`（expectedRevision 整板 CAS；坏 JSON 拒绝覆盖；
   删阶段时阶段内仍有事项则阻止）；另 `GET /health`。
+- **工作区解析必须显式，任何一方都不猜默认（2026-11-10 修复踩坑）**：曾因「无 ws 时宿主回退
+  `sessions.list()[0]`」导致所有工作区面板读写同一份板子（恰好旧目录 `dsh-taskbord` 的会话排第一）。
+  现约定：宿主 `resolveRequestedWorkspace` 无 ws 一律 undefined → 路由 400；客户端页签体按内建
+  「工作区文件」同款方式拿当前会话工作区——session 作用域标准 props `useSessions(s => s.byId[sessionId]?.cwd)`，
+  cwd 未解析渲染占位不加载（`status.noWorkspace`），cwd 变化重新 load；load 用序号防跨工作区竞态。
+  `sessions.list()` 的顺序≠当前会话，不要用它当默认。
 - 工作区枚举：宿主 sessions 服务 cwd ∪ `~/.dsh/storages/session_projcache/sessions/*.json` 的 `record.identity.cwd` 去重。
 - 存储：`<工作区>/.dsh/taskboard/board.json`，原子写（temp + rename），缺文件时自动建默认板（1 个里程碑 M1 + 前 4 个预置阶段）。
 - `~/.dsh/taskboard.sqlite` 与本插件无关，不读写。

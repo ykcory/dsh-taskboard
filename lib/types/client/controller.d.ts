@@ -43,14 +43,22 @@ export declare class TaskboardController {
     private state;
     /** Cached so getSnapshot stays referentially stable between changes. */
     private snapshot;
+    /** Monotonic load token: a superseded load's late response must not land. */
+    private loadSeq;
     constructor(api: BoardApi);
     getSnapshot(): TaskboardSnapshot;
     subscribe(fn: () => void): () => void;
     private set;
     /** Dismiss the transient notice line. */
     dismissNotice(): void;
-    /** Load the board (default workspace: the active session workspace). */
-    load(): Promise<void>;
+    /**
+     * Load the board of one workspace — the active session's workspace root,
+     * read by the tab body from the framework session list (the same source the
+     * shipped files tab uses). Always explicit: the host refuses a board read
+     * without a workspace, so no default is ever guessed here. A newer load
+     * supersedes an in-flight one; its late response is dropped.
+     */
+    load(workspace: string): Promise<void>;
     /** Select the milestone tab the board area shows. */
     selectEpic(epicId: string): void;
     /** Create a milestone (tab); the new tab becomes the selected one. */

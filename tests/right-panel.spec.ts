@@ -6,15 +6,24 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { act, createElement } from 'react'
+import { createRoot } from 'react-dom/client'
 import type { Context } from '@deepseek-ai/cordis'
-import { BoardApi } from '../src/client/api.ts'
+import { BoardApi, type BoardPayload } from '../src/client/api.ts'
 import { TaskboardController } from '../src/client/controller.ts'
 import { registerTaskboardTab, TASKBOARD_TAB_ID, TASKBOARD_TAB_KIND } from '../src/client/right-panel.tsx'
+import { defaultBoard } from '../src/core/board.ts'
+
+// React 18's act needs the explicit environment flag; without it createRoot
+// defers every render to the scheduler and nothing mounts in the test.
+globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 /** One captured slot registration. */
 interface Registration {
   name: string
   options: Record<string, unknown>
+  /** The component handed to slots.register (the tab body or title). */
+  component?: unknown
 }
 
 /** A client context double recording every registration it receives. */
@@ -33,8 +42,8 @@ function makeContext(): {
         injects.push(key)
         return callback()
       },
-      register(options: Record<string, unknown>) {
-        registrations.push({ name: String(options['name']), options })
+      register(options: Record<string, unknown>, component?: unknown) {
+        registrations.push({ name: String(options['name']), options, component })
         return () => {}
       },
     },
@@ -125,5 +134,87 @@ describe('registerTaskboardTab', () => {
     expect(() => {
       dispose()
     }).not.toThrow()
+  })
+})
+
+/** Standard-props double: the framework session kit the slot adds to the body. */
+function sessionKit(cwd: string | undefined): Record<string, unknown> {
+  return {
+    sessionId: 's1',
+    useSessions: (selector: (sessions: { byId: Record<string, { cwd?: string | undefined } | undefined> }) => unknown) =>
+      selector({ byId: cwd === undefined ? {} : { s1: { cwd } } }),
+  }
+}
+
+/** A board API double recording every getBoard ws. */
+function recordingApi(): { api: BoardApi; gets: Array<string | undefined> } {
+  const gets: Array<string | undefined> = []
+  const api = {
+    async getBoard(ws?: string): Promise<BoardPayload> {
+      gets.push(ws)
+      return { workspace: { cwd: ws ?? '/w/none', name: 'none' }, board: defaultBoard() }
+    },
+    async putBoard(): Promise<BoardPayload> {
+      throw new Error('no puts expected')
+    },
+  } as unknown as BoardApi
+  return { api, gets }
+}
+
+/** Mount the registered tab body with the given standard props. */
+async function mountBody(api: BoardApi, standard: Record<string, unknown>): Promise<{
+  container: HTMLElement
+  unmount: () => Promise<void>
+}> {
+  const { ctx, registrations } = makeContext()
+  // The controller drives the SAME api double, so every read is observable.
+  const controller = new TaskboardController(api)
+  registerTaskboardTab(ctx, controller, api)
+  const body = registrations.find((entry) => entry.name === 'sidebar.right.pane.tab')!.component
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  await act(async () => {
+    root.render(createElement(body as never, { controller, api, ...standard }))
+  })
+  // One more drain so a load resolved during the mount act commits its state.
+  await act(async () => {})
+  return {
+    container,
+    unmount: async () => {
+      await act(async () => {
+        root.unmount()
+      })
+    },
+  }
+}
+
+describe('TaskboardTabBody workspace resolution', () => {
+  it('loads the resolved session workspace and renders the board', async () => {
+    const { api, gets } = recordingApi()
+    const mounted = await mountBody(api, sessionKit('/w/session'))
+    // The read names the workspace, exactly like the shipped files tab's read.
+    expect(gets).toEqual(['/w/session'])
+    expect(mounted.container.querySelector('[data-dsh-part="taskboard-no-workspace"]')).toBeNull()
+    await mounted.unmount()
+  })
+
+  it('shows the status line and loads nothing without a workspace', async () => {
+    const { api, gets } = recordingApi()
+    const mounted = await mountBody(api, sessionKit(undefined))
+    const status = mounted.container.querySelector('[data-dsh-part="taskboard-no-workspace"]')
+    expect(status).not.toBeNull()
+    // The shell ships no lang; t() falls back to the en dictionary.
+    expect(status!.textContent).toBe('No workspace for the current session')
+    expect(gets).toEqual([])
+    await mounted.unmount()
+  })
+
+  it('degrades to the status line when the shell omits the session kit', async () => {
+    const { api, gets } = recordingApi()
+    const mounted = await mountBody(api, {})
+    expect(mounted.container.querySelector('[data-dsh-part="taskboard-no-workspace"]')).not.toBeNull()
+    expect(gets).toEqual([])
+    await mounted.unmount()
   })
 })

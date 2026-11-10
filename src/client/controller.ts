@@ -56,6 +56,8 @@ export class TaskboardController {
   private state: TaskboardSnapshot = INITIAL
   /** Cached so getSnapshot stays referentially stable between changes. */
   private snapshot: TaskboardSnapshot = INITIAL
+  /** Monotonic load token: a superseded load's late response must not land. */
+  private loadSeq = 0
 
   constructor(api: BoardApi) {
     this.api = api
@@ -84,15 +86,23 @@ export class TaskboardController {
     this.set({ notice: undefined })
   }
 
-  /** Load the board (default workspace: the active session workspace). */
-  async load(): Promise<void> {
-    if (this.state.phase === 'loading') return
+  /**
+   * Load the board of one workspace — the active session's workspace root,
+   * read by the tab body from the framework session list (the same source the
+   * shipped files tab uses). Always explicit: the host refuses a board read
+   * without a workspace, so no default is ever guessed here. A newer load
+   * supersedes an in-flight one; its late response is dropped.
+   */
+  async load(workspace: string): Promise<void> {
+    const seq = ++this.loadSeq
     this.set({ phase: 'loading', notice: undefined })
     try {
-      const payload = await this.api.getBoard()
+      const payload = await this.api.getBoard(workspace)
+      if (seq !== this.loadSeq) return
       this.adopt(payload)
       this.set({ phase: 'ready' })
     } catch (error) {
+      if (seq !== this.loadSeq) return
       this.set({
         phase: 'error',
         notice: { kind: 'load', detail: error instanceof Error ? error.message : String(error) },

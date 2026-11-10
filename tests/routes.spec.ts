@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { ROUTES, makeRoutes, type BoardRoutesDeps } from '../src/host/routes.ts'
+import { resolveRequestedWorkspace } from '../src/index.ts'
 import { defaultBoard, type BoardFile } from '../src/core/board.ts'
 
 /** Captured response written by a route handler. */
@@ -57,13 +58,15 @@ function fakeResponse(): { res: ServerResponse; captured: Captured } {
   return { res, captured }
 }
 
-/** Route dependencies over an in-memory board, with the real resolver. */
+/** Route dependencies over an in-memory board, with the real strict resolver. */
 function makeDeps(overrides: Partial<BoardRoutesDeps> = {}): BoardRoutesDeps {
   let board: BoardFile = defaultBoard()
   return {
     sessionCwds: () => ['/w/demo'],
     projcacheCwds: async () => ['/w/other'],
-    resolveWorkspace: (override) => (override === undefined ? '/w/demo' : override.startsWith('/') ? override : undefined),
+    // The REAL resolver: a ws-less request resolves to nothing and the route
+    // refuses it — no default workspace is ever guessed.
+    resolveWorkspace: resolveRequestedWorkspace,
     readOrInitBoard: async () => ({ board, created: false }),
     saveBoard: async (_workspace, expectedRevision, incoming) => {
       if (expectedRevision !== board.revision) {
@@ -139,9 +142,16 @@ describe('GET /workspaces', () => {
 })
 
 describe('GET /board', () => {
-  it('serves the board for the default workspace', async () => {
+  it('refuses a ws-less read instead of guessing a default workspace', async () => {
     const { res, captured } = fakeResponse()
     await route(ROUTES.board, makeDeps()).handler(fakeRequest(), res)
+    expect(captured.status).toBe(400)
+    expect((captured.body as { error: string }).error).toBe('ws must be an absolute workspace path')
+  })
+
+  it('serves the board of the named workspace', async () => {
+    const { res, captured } = fakeResponse()
+    await route(ROUTES.board, makeDeps()).handler(fakeRequest({ url: `${ROUTES.board}?ws=/w/demo` }), res)
     expect(captured.status).toBe(200)
     const body = captured.body as { workspace: { cwd: string }; board: BoardFile }
     expect(body.workspace.cwd).toBe('/w/demo')
@@ -151,7 +161,7 @@ describe('GET /board', () => {
   it('reports an unusable board file with 409 instead of replacing it', async () => {
     const { res, captured } = fakeResponse()
     const deps = makeDeps({ readOrInitBoard: async () => ({ error: 'board file is not valid JSON' }) })
-    await route(ROUTES.board, deps).handler(fakeRequest(), res)
+    await route(ROUTES.board, deps).handler(fakeRequest({ url: `${ROUTES.board}?ws=/w/demo` }), res)
     expect(captured.status).toBe(409)
   })
 
@@ -166,7 +176,10 @@ describe('PUT /board', () => {
   it('saves a whole board and bumps the revision', async () => {
     const { res, captured } = fakeResponse()
     const body = JSON.stringify({ expectedRevision: 1, board: { ...defaultBoard(), revision: 1 } })
-    await route(ROUTES.board, makeDeps()).handler(fakeRequest({ method: 'PUT', body }), res)
+    await route(ROUTES.board, makeDeps()).handler(
+      fakeRequest({ method: 'PUT', url: `${ROUTES.board}?ws=/w/demo`, body }),
+      res,
+    )
     expect(captured.status).toBe(200)
     expect((captured.body as { board: BoardFile }).board.revision).toBe(2)
   })
@@ -174,26 +187,56 @@ describe('PUT /board', () => {
   it('answers 409 on a stale revision', async () => {
     const { res, captured } = fakeResponse()
     const body = JSON.stringify({ expectedRevision: 7, board: defaultBoard() })
-    await route(ROUTES.board, makeDeps()).handler(fakeRequest({ method: 'PUT', body }), res)
+    await route(ROUTES.board, makeDeps()).handler(
+      fakeRequest({ method: 'PUT', url: `${ROUTES.board}?ws=/w/demo`, body }),
+      res,
+    )
     expect(captured.status).toBe(409)
   })
 
   it('rejects a body without a usable expectedRevision', async () => {
     const { res, captured } = fakeResponse()
     const body = JSON.stringify({ board: defaultBoard() })
-    await route(ROUTES.board, makeDeps()).handler(fakeRequest({ method: 'PUT', body }), res)
+    await route(ROUTES.board, makeDeps()).handler(
+      fakeRequest({ method: 'PUT', url: `${ROUTES.board}?ws=/w/demo`, body }),
+      res,
+    )
     expect(captured.status).toBe(400)
   })
 
   it('rejects a non-object body', async () => {
     const { res, captured } = fakeResponse()
-    await route(ROUTES.board, makeDeps()).handler(fakeRequest({ method: 'PUT', body: '[]' }), res)
+    await route(ROUTES.board, makeDeps()).handler(
+      fakeRequest({ method: 'PUT', url: `${ROUTES.board}?ws=/w/demo`, body: '[]' }),
+      res,
+    )
     expect(captured.status).toBe(400)
   })
 
   it('answers 405 for another method', async () => {
     const { res, captured } = fakeResponse()
-    await route(ROUTES.board, makeDeps()).handler(fakeRequest({ method: 'DELETE' }), res)
+    await route(ROUTES.board, makeDeps()).handler(
+      fakeRequest({ method: 'DELETE', url: `${ROUTES.board}?ws=/w/demo` }),
+      res,
+    )
     expect(captured.status).toBe(405)
+  })
+})
+
+describe('resolveRequestedWorkspace', () => {
+  it('resolves and normalizes an explicit absolute workspace', () => {
+    expect(resolveRequestedWorkspace('/w/demo')).toBe('/w/demo')
+    expect(resolveRequestedWorkspace('  /w/demo/  ')).toBe('/w/demo')
+  })
+
+  it('refuses a missing or blank workspace', () => {
+    expect(resolveRequestedWorkspace(undefined)).toBeUndefined()
+    expect(resolveRequestedWorkspace('   ')).toBeUndefined()
+  })
+
+  it('refuses relative and traversal paths', () => {
+    expect(resolveRequestedWorkspace('relative/path')).toBeUndefined()
+    expect(resolveRequestedWorkspace('/w/../etc')).toBeUndefined()
+    expect(resolveRequestedWorkspace('/w/./x')).toBeUndefined()
   })
 })
