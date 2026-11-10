@@ -65,7 +65,7 @@ export const TASKBOARD_SKILL: RuntimeSkillFace = {
 export type SkillRegistrationOutcome =
   | { status: 'registered'; disposer?: () => void }
   | { status: 'service-missing' }
-  | { status: 'failed'; error: string }
+  | { status: 'failed'; error: string; stack?: string }
 
 /**
  * Register the skill into the host skills service. Defensive by design: the
@@ -87,7 +87,8 @@ export function registerBoardSkill(
     return { status: 'registered', disposer: typeof result === 'function' ? (result as () => void) : undefined }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    const stack = error instanceof Error ? error.stack?.split('\n').slice(0, 6).join('\n') : undefined
     warn(`taskboard skill registration failed: ${message}`)
-    return { status: 'failed', error: message }
+    return { status: 'failed', error: message, stack }
   }
 }

@@ -37,6 +37,8 @@ export interface BoardRoutesDeps {
   readOrInitBoard(workspace: string): Promise<{ board: unknown; created: boolean } | { error: string }>
   /** Skill registration outcome, for diagnosing the agent-facing skill from outside. */
   skillStatus(): string
+  /** Service shape + failure stack for the skill registration (diagnostics). */
+  skillDebug(): unknown
   /** Logger. */
   logger: { warn(error: unknown): void }
 }
@@ -131,7 +133,7 @@ export function makeRoutes(ctx: Context, deps: BoardRoutesDeps): WebRoute[] {
       path: ROUTES.health,
       handler: async (req, res) => {
         if (!guard(req, res)) return
-        writeJson(res, 200, { ok: true, plugin: 'taskboard', skill: deps.skillStatus() })
+        writeJson(res, 200, { ok: true, plugin: 'taskboard', skill: deps.skillStatus(), skillDebug: deps.skillDebug() })
       },
     },
   ]

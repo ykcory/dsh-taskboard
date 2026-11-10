@@ -44,6 +44,7 @@ export type SkillRegistrationOutcome = {
 } | {
     status: 'failed';
     error: string;
+    stack?: string;
 };
 /**
  * Register the skill into the host skills service. Defensive by design: the

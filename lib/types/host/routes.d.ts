@@ -35,6 +35,8 @@ export interface BoardRoutesDeps {
     }>;
     /** Skill registration outcome, for diagnosing the agent-facing skill from outside. */
     skillStatus(): string;
+    /** Service shape + failure stack for the skill registration (diagnostics). */
+    skillDebug(): unknown;
     /** Logger. */
     logger: {
         warn(error: unknown): void;

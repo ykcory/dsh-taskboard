@@ -61,7 +61,12 @@ describe('registerBoardSkill', () => {
   it('degrades to failed with a warning when registration throws', () => {
     const warn = vi.fn()
     const skills: SkillsFace = { register: () => { throw new Error('registry closed') } }
-    expect(registerBoardSkill(skills, warn)).toEqual({ status: 'failed', error: 'registry closed' })
+    const outcome = registerBoardSkill(skills, warn)
+    expect(outcome.status).toBe('failed')
+    if (outcome.status === 'failed') {
+      expect(outcome.error).toBe('registry closed')
+      expect(outcome.stack).toContain('registerBoardSkill')
+    }
     expect(warn).toHaveBeenCalledOnce()
     expect(String(warn.mock.calls[0]?.[0])).toContain('registry closed')
   })

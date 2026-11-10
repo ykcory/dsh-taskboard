@@ -68,7 +68,7 @@ function makeDeps(overrides: Partial<BoardRoutesDeps> = {}): BoardRoutesDeps {
     // refuses it — no default workspace is ever guessed.
     resolveWorkspace: resolveRequestedWorkspace,
     readOrInitBoard: async () => ({ board, created: false }),
-    skillStatus: () => 'registered',
+    skillStatus: () => 'registered', skillDebug: () => ({}),
     saveBoard: async (_workspace, expectedRevision, incoming) => {
       if (expectedRevision !== board.revision) {
         return { ok: false, httpStatus: 409, error: 'revision conflict' }

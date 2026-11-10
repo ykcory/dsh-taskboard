@@ -93,6 +93,8 @@ function applyImpl(ctx: Context, config?: Config): void {
 
   /** Skill registration outcome, read by the health route for outside diagnosis. */
   let skillStatus = 'not-applied'
+  /** Shape of the host skills service + failure stack, for diagnosing the host-side gap. */
+  let skillDebug: Record<string, unknown> = {}
 
   const routes = makeRoutes(hostCtx, {
     sessionCwds,
@@ -101,11 +103,30 @@ function applyImpl(ctx: Context, config?: Config): void {
     saveBoard: (workspace, expectedRevision, board) => saveBoard(workspace, expectedRevision, board),
     readOrInitBoard: (workspace) => readOrInitBoard(workspace),
     skillStatus: () => skillStatus,
+    skillDebug: () => skillDebug,
     logger: { warn: (error) => ctx.logger.warn(error) },
   })
   ctx.effect(() => {
+    skillDebug = {
+      serviceType: hostCtx.skills?.constructor?.name ?? typeof hostCtx.skills,
+      registerType: typeof hostCtx.skills?.register,
+      prototypeChain: (() => {
+        const names: string[] = []
+        let proto = hostCtx.skills ? Object.getPrototypeOf(hostCtx.skills) : undefined
+        while (proto && proto !== Object.prototype && names.length < 4) {
+          names.push(proto.constructor?.name ?? '(anon)')
+          proto = Object.getPrototypeOf(proto)
+        }
+        return names.join(' → ')
+      })(),
+    }
     const outcome = registerBoardSkill(hostCtx.skills, (message) => ctx.logger.warn(message))
-    skillStatus = outcome.status === 'failed' ? `failed: ${outcome.error}` : outcome.status
+    if (outcome.status === 'failed') {
+      skillStatus = `failed: ${outcome.error}`
+      skillDebug.stack = outcome.stack
+    } else {
+      skillStatus = outcome.status
+    }
     const disposers = routes.map((route) => hostCtx.webServer.register(route))
     return () => {
       if (outcome.status === 'registered') outcome.disposer?.()
