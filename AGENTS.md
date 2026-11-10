@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+- **GitHub 仓库**：https://github.com/ykcory/dsh-taskboard （public，remote `origin` 走 SSH，分支 `main`）。
+  README 双语：`README.md`（英文默认）+ `README.zh-CN.md`（中文），顶部互链切换。
 - **Phase 0 设计图**：第 6 版完成，等待用户在画布上复验。画布节点：ardot 文件「新文件」`745806795348219`，Page 1，
   `21:1` 主界面（board-main）/ `22:1` 新建事项弹层（board-create-task）/ `23:1` 新建里程碑弹层（board-create-epic）/
   `25:1` 阶段色板弹层（board-stage-popover）。帧在画布上的 x/y 按用户视口临时摆放，不影响内容。
