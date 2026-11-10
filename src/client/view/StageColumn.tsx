@@ -1,14 +1,16 @@
 /**
- * One stage column: head (drag handle, color popover, inline rename, count,
- * add button), the card list with drag-and-drop reordering, and the
+ * One stage column: head (whole-row drag, color popover, inline rename,
+ * count, add button), the card list with drag-and-drop reordering, and the
  * empty-stage hint.
  *
- * Cards drag by a grip handle within their stage and across stages; the
- * column head handle drags the whole stage left/right. Drop positions show
- * as a thin insertion bar. The column talks to the controller directly for
- * its own mutations (move, rename, recolor, remove) so the popover feedback
- * stays local; opening the create-task dialog belongs to the page (it owns
- * the modal state).
+ * Cards drag anywhere on the card (no handle) within their stage and across
+ * stages; the whole column head drags the stage left/right. While a drag is
+ * in flight the source fades to 45% opacity, and hovering a column tints its
+ * outline with the stage color. Drop positions still show as a thin
+ * insertion bar. The column talks to the controller directly for its own
+ * mutations (rename, recolor, remove) so the popover feedback stays local;
+ * opening the create-task dialog belongs to the page (it owns the modal
+ * state).
  */
 
 import { useCallback, useEffect, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent, type ReactElement } from 'react'
@@ -16,17 +18,21 @@ import { STAGE_PALETTE, type BoardColumn, type TaskItem } from '../../core/board
 import type { MutationResult, TaskboardController } from '../controller.ts'
 import { t } from '../locales.ts'
 import { beginDrag, endDrag, getDragPayload, onDragEnd, readDraggedTaskId, TASK_ID_MIME } from './dnd.ts'
-import { ChipDroplet, GripIcon, PlusIcon } from './icons.tsx'
+import { ChipDroplet, PlusIcon } from './icons.tsx'
 import { tintBackground } from './tint.ts'
 
-/** One draggable task card with its grip handle; right-click bubbles up. */
+/** One draggable task card; delete lives in the hover-revealed corner ×. */
 export function TaskCard({
   task,
+  onDelete,
   onContextMenu,
 }: {
   task: TaskItem
+  onDelete(task: TaskItem): void
   onContextMenu(task: TaskItem, event: React.MouseEvent): void
 }): ReactElement {
+  // Fade the source card while its own drag is in flight.
+  const [dragging, setDragging] = useState(false)
   const onDragStart = (event: DragEvent<HTMLDivElement>): void => {
     const transfer = event.dataTransfer
     if (transfer === null) return
@@ -34,23 +40,36 @@ export function TaskCard({
     transfer.effectAllowed = 'move'
     transfer.setData(TASK_ID_MIME, task.id)
     transfer.setData('text/plain', task.id)
+    setDragging(true)
   }
   return (
     <div
-      className="group flex cursor-grab items-start gap-[8px] rounded-[10px] border border-black/[0.06] bg-white px-[10px] py-[12px] text-[13px] leading-[1.55] text-[#33363b] active:cursor-grabbing"
+      className={`group relative flex cursor-grab items-start rounded-[10px] border border-black/[0.06] bg-white px-[10px] py-[12px] text-[13px] leading-[1.55] text-[#33363b] [overflow-wrap:anywhere] active:cursor-grabbing ${dragging ? 'opacity-45' : ''}`}
       draggable
       onDragStart={onDragStart}
-      onDragEnd={endDrag}
+      onDragEnd={() => {
+        setDragging(false)
+        endDrag()
+      }}
       onContextMenu={(event) => {
         event.preventDefault()
         onContextMenu(task, event)
       }}
       data-dsh-part="card"
     >
-      <span className="mt-[1px] shrink-0 opacity-40 transition-opacity group-hover:opacity-100" data-dsh-part="card-handle">
-        <GripIcon />
-      </span>
       <span className="min-w-0">{task.title}</span>
+      <button
+        type="button"
+        className="absolute right-[4px] top-[4px] flex h-[20px] w-[20px] cursor-pointer items-center justify-center rounded-[6px] text-[13px] leading-none text-[#9aa0a8] opacity-0 hover:bg-[#f3f4f6] hover:text-[#e05252] focus-visible:opacity-100 group-hover:opacity-100"
+        aria-label={t('task.menu.delete')}
+        onClick={(event) => {
+          event.stopPropagation()
+          onDelete(task)
+        }}
+        data-dsh-part="card-delete"
+      >
+        ×
+      </button>
     </div>
   )
 }
@@ -75,12 +94,15 @@ export function StageColumn({
   tasks,
   controller,
   onOpenCreateTask,
+  onTaskDelete,
   onTaskContextMenu,
 }: {
   column: BoardColumn
   tasks: TaskItem[]
   controller: TaskboardController
   onOpenCreateTask(columnId: string): void
+  /** The corner × on a card; the page owns the controller call. */
+  onTaskDelete(task: TaskItem): void
   /** Right-click on a card; the page owns the context menu. */
   onTaskContextMenu(task: TaskItem, event: ReactMouseEvent): void
 }): ReactElement {
@@ -89,6 +111,8 @@ export function StageColumn({
   const [renaming, setRenaming] = useState(false)
   const [renameDraft, setRenameDraft] = useState('')
   const [dropping, setDropping] = useState(false)
+  /** Fade the whole column while its head drag is in flight. */
+  const [dragging, setDragging] = useState(false)
   /** Position the hovered pointer would drop a card at (gap index). */
   const [dropHint, setDropHint] = useState<number | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
@@ -194,7 +218,7 @@ export function StageColumn({
     await controller.moveTask(taskId, column.id, hint ?? tasks.length)
   }
 
-  const onColumnHandleDragStart = (event: DragEvent<HTMLSpanElement>): void => {
+  const onColumnDragStart = (event: DragEvent<HTMLDivElement>): void => {
     const transfer = event.dataTransfer
     if (transfer === null) return
     beginDrag({ kind: 'column', columnId: column.id })
@@ -205,42 +229,51 @@ export function StageColumn({
       try {
         transfer.setDragImage(root, 120, 20)
       } catch {
-        // The default handle-sized drag image is fine when setDragImage fails.
+        // The default head-sized drag image is fine when setDragImage fails.
       }
     }
+    setDragging(true)
   }
 
-  const bodyClass = dropping
-    ? 'flex min-h-0 flex-1 flex-col gap-[10px] overflow-y-auto px-[10px] pb-[10px] outline outline-1 -outline-offset-2 outline-[#1c1e21]/20'
-    : 'flex min-h-0 flex-1 flex-col gap-[10px] overflow-y-auto px-[10px] pb-[10px]'
+  const bodyClass = 'flex min-h-0 flex-1 flex-col gap-[10px] overflow-y-auto px-[10px] pb-[10px]'
 
   // Cards interleaved with the insertion bar at the hovered gap position.
   const bodyChildren: ReactElement[] = []
   for (let index = 0; index <= tasks.length; index += 1) {
     if (dropHint === index) bodyChildren.push(<DropHint key={`hint-${index}`} />)
     const task = tasks[index]
-    if (task !== undefined) bodyChildren.push(<TaskCard key={task.id} task={task} onContextMenu={onTaskContextMenu} />)
+    if (task !== undefined) {
+      bodyChildren.push(
+        <TaskCard key={task.id} task={task} onDelete={onTaskDelete} onContextMenu={onTaskContextMenu} />,
+      )
+    }
   }
 
   return (
     <div
       ref={rootRef}
-      className="relative flex h-full w-full flex-col rounded-[12px]"
+      className={`relative flex h-full w-full flex-col rounded-[12px] ${dragging ? 'opacity-45' : ''}`}
       // The tint is a translucent wash: the column paints white beneath it so
       // the result does not depend on whatever surface the panel sits on.
-      style={{ background: `linear-gradient(${tintBackground(column.color)}, ${tintBackground(column.color)}), #ffffff` }}
+      // While a card drag hovers the column, the stage color rings it inside
+      // (the reference board's `.col.drop-target` inset shadow).
+      style={{
+        background: `linear-gradient(${tintBackground(column.color)}, ${tintBackground(column.color)}), #ffffff`,
+        boxShadow: dropping ? `inset 0 0 0 2px ${column.color}` : undefined,
+      }}
       data-dsh-part="column"
     >
-      <div className="flex items-center gap-[8px] px-[10px] pb-[10px] pt-[14px]">
-        <span
-          className="flex h-[16px] w-[14px] shrink-0 cursor-grab items-center justify-center active:cursor-grabbing"
-          draggable
-          onDragStart={onColumnHandleDragStart}
-          onDragEnd={endDrag}
-          data-dsh-part="stage-handle"
-        >
-          <GripIcon />
-        </span>
+      <div
+        className="flex cursor-grab items-center gap-[8px] px-[10px] pb-[10px] pt-[14px] active:cursor-grabbing"
+        // Not draggable while renaming: dragging would fight text selection.
+        draggable={!renaming}
+        onDragStart={onColumnDragStart}
+        onDragEnd={() => {
+          setDragging(false)
+          endDrag()
+        }}
+        data-dsh-part="stage-head"
+      >
         <button
           type="button"
           className="flex h-[20px] w-[20px] shrink-0 cursor-pointer items-center justify-center rounded-full"

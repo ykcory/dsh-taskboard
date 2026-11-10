@@ -16,7 +16,7 @@ import { defaultBoard } from '../src/core/board.ts'
 
 // React 18's act needs the explicit environment flag; without it createRoot
 // defers every render to the scheduler and nothing mounts in the test.
-globalThis.IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 /** One captured slot registration. */
 interface Registration {

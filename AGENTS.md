@@ -11,7 +11,7 @@
   `25:1` 阶段色板弹层（board-stage-popover）。帧在画布上的 x/y 按用户视口临时摆放，不影响内容。
 - 工具行右对齐已按**节点树实测坐标**修复：四帧按钮组右缘均 = 1501.0（内容区右缘，零偏差）。
   特写图：`design/screenshots/toolbar-closeup-v6.png`。
-- **Phase 1 插件实现**：已完成（2026-11-10）。宿主路由、看板 UI、CAS 写入、删除防护、92 项单测全部就绪，
+- **Phase 1 插件实现**：已完成（2026-11-10）。宿主路由、看板 UI、CAS 写入、删除防护、101 项单测全部就绪，
   已以 GitHub 依赖 `github:ykcory/dsh-taskboard` 形态装进 desktop profile（`lib/` 入库后安装可用，
   见「安装形态」条目），行 `ui-taskboard` 为 enabled。**需用户重启 DSH 服务后右侧栏开始页才会出现卡片。**
 
@@ -43,7 +43,7 @@
 pnpm install     # 首次；.npmrc/package.json 已声明 pnpm.ignoredBuiltDependencies 规避 ERR_PNPM_IGNORED_BUILDS
 pnpm build       # tailwind → tsc 声明 → tsdown（产出 lib/index.js + lib/client.js + lib/types）
 pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest run（tests/ 下 7 个 spec，92 用例）
+pnpm test        # vitest run（tests/ 下 7 个 spec，101 用例）
 ```
 
 > **pnpm 安装提示**：`ERR_PNPM_IGNORED_BUILDS` 对 `@deepseek-ai/dsh-subprocess-local`、`node-pty`、`koffi` 等
@@ -77,7 +77,7 @@ src/
     view/                 React 看板 UI：TaskboardPanel（停靠栏）/ StageColumn / Modals / dnd（拖拽状态）/ icons / tint / GuideArtwork（卡片图标）
     tailwind.input.css    Tailwind 入口（@source "./" 扫描 view/）
 design/                   Phase 0 设计稿（4 个 HTML + 生成器 + 截图）
-tests/                    7 个 spec / 92 用例：board、board-store、workspaces、routes、controller、right-panel、tint
+tests/                    7 个 spec / 101 用例：board、board-store、workspaces、routes、controller、right-panel、tint
 ```
 
 ## 设计稿流程（ardot MCP）
@@ -104,23 +104,27 @@ ardot MCP 在 `http://127.0.0.1:50501/api/v1/mcp`（本机 ardot 应用）。改
 - 层级：工作区 → 里程碑页签（M0/M1/…）→ 事项卡片；**默认预置 1 个里程碑「M1」+ 前 4 个阶段**（初始化 / 执行中 / 待审核 / 已完成，不含「失败」），其余由用户「添加阶段」弹窗自建
   （填阶段名，颜色随机；8 色板仍可选），**阶段可自定义：名字 + 颜色**（列底色为阶段色低透明度叠加白底）。
 - **里程碑右键菜单**：重命名 / 删除里程碑。**最后一个里程碑不可删**；仍有事项的里程碑也不可删（灰显 + 说明）。
-- **事项右键菜单（2026-11-10）**：编辑 / 删除。编辑复用事项表单弹窗（`TaskFormModal`，新建/编辑共用：
-  事项标题 + 所属阶段，预填当前值，提交按钮「保存」），改阶段 = 移到目标阶段末尾，一次 CAS 提交
-  （`editTask(taskId, {title?, columnId?})`）；删除直接删，无防护（`removeTask`，卡片无依赖）。
-  右键菜单壳与里程碑菜单共用（`view/TaskboardPanel.tsx` 里 `ContextMenu` + `MenuItem` +
-  `useDismissOnOutside`）。
+- **事项删除与右键菜单（2026-11-10 改版）**：删除走卡片**右上角 × 按钮**（hover 显现、20px、
+  hover 红字灰底，aria-label 复用 `task.menu.delete`），直接删无防护（`removeTask`，卡片无依赖）；
+  右键菜单只剩**编辑**一项，复用事项表单弹窗（`TaskFormModal`，新建/编辑共用：事项标题 + 所属阶段，
+  预填当前值，提交按钮「保存」），改阶段 = 移到目标阶段末尾，一次 CAS 提交
+  （`editTask(taskId, {title?, columnId?})`）。右键菜单壳与里程碑菜单共用（`view/TaskboardPanel.tsx`
+  里 `ContextMenu` + `MenuItem` + `useDismissOnOutside`）。
 - 存储：`<工作区>/.dsh/taskboard/board.json`，整板 CAS（expectedRevision）。
 - v1 纯手动 UI；agent 直接用文件工具改 JSON。
 - 工作区/项目切换器：用户明确暂不做（2026-11-10），v1 面板只显示当前工作区看板。
 - 工具行：里程碑页签在左；右侧按钮组「＋ 添加阶段」（白底描边胶囊）+「新建事项」（黑胶囊）**右对齐贴内容区右缘（节点树实测零偏差）**；页签行「＋」打开新建里程碑弹层（字段：名称）。
 - 阶段轻量管理（2026-11-10 用户定稿，弃用大弹窗）：点列头**色块**（20px 圆 + 白色调色滴图标）弹小色板（8 预设色，点选改色）+「删除阶段」；**阶段名点击 inline 改名**；**新增阶段 = 工具行「＋ 添加阶段」按钮打开弹窗填阶段名，颜色随机**；预置阶段与新增阶段同规则。删除防护：阶段内仍有事项则禁止删除。空阶段只展示「此阶段暂无事项」说明文字（无虚线框无大按钮）。列头添加事项按钮为 24px 圆形描边按钮（加号图标）。
 - 页面四周 24px 间隙；新建事项弹层字段用「所属阶段」（带色块下拉）。
-- **拖动排序（2026-11-10）**：排序模型 = `board.columns` 数组顺序即阶段顺序、`board.tasks`
-  数组顺序即展示顺序（无独立 order 字段，agent 改文件即可排序）。UI 上阶段列头与事项卡片各有一个
-  六点把手：列头把手左右拖整列（阶段条上显示竖向插入条），卡片把手可在同阶段内排序、也可跨阶段拖动
-  （列内显示横向插入条，按指针上下半定位插入间隙）。对应控制器操作 `moveTask(taskId, columnId, toIndex?)`、
-  `moveStage(columnId, toIndex)`（无变化跳过提交）；拖拽状态（dragover 下读不到 DataTransfer）走
-  `view/dnd.ts` 模块级槽位 + dragend 广播清插入条。
+- **拖动排序（2026-11-10 改版：无把手整卡/整列头拖动，样式参考 `~/Desktop/task-board/index.html`）**：
+  排序模型 = `board.columns` 数组顺序即阶段顺序、`board.tasks`
+  数组顺序即展示顺序（无独立 order 字段，agent 改文件即可排序）。UI 上**事项整卡可拖**（无把手，
+  `cursor-grab`，拖动中原卡 opacity 0.45），同阶段内排序、也可跨阶段拖动（列内显示横向插入条，
+  按指针上下半定位插入间隙）；**阶段列头整行可拖**（无把手，改名输入态下暂停拖动避免选文本冲突，
+  拖动中整列 opacity 0.45，`setDragImage` 用整列做拖影），阶段条上显示竖向插入条；拖动悬停在列上时
+  整列 inset 2px 阶段色描边（参考稿 `.col.drop-target`，替代旧列内 outline）。对应控制器操作
+  `moveTask(taskId, columnId, toIndex?)`、`moveStage(columnId, toIndex)`（无变化跳过提交）；拖拽状态
+  （dragover 下读不到 DataTransfer）走 `view/dnd.ts` 模块级槽位 + dragend 广播清插入条。
 - UI 文案已定稿：概念名见上节；通用词（取消/创建/完成/名称）随用。
 - **输入框 placeholder 一律用字段用途描述，不用示例值**（如「输入里程碑名称」而非「M4」），
   否则用户会误当成预填内容；中英文都遵守。

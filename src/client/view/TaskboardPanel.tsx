@@ -323,6 +323,9 @@ export function TaskboardPanel({ controller }: { controller: TaskboardController
                     tasks={tasksByColumn.get((columns[index] as BoardColumn).id) ?? []}
                     controller={controller}
                     onOpenCreateTask={openTaskModal}
+                    onTaskDelete={(task) => {
+                      void controller.removeTask(task.id)
+                    }}
                     onTaskContextMenu={(task, event) => {
                       setTaskMenu({ taskId: task.id, x: event.clientX, y: event.clientY })
                     }}
@@ -435,14 +438,6 @@ export function TaskboardPanel({ controller }: { controller: TaskboardController
             onClick={() => {
               setEditTaskState({ id: taskBeingMenued.id, title: taskBeingMenued.title, columnId: taskBeingMenued.columnId })
               setTaskMenu(null)
-            }}
-          />
-          <MenuItem
-            label={t('task.menu.delete')}
-            danger
-            onClick={() => {
-              setTaskMenu(null)
-              void controller.removeTask(taskBeingMenued.id)
             }}
           />
         </ContextMenu>

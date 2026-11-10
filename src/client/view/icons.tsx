@@ -30,17 +30,3 @@ export function ChevronIcon(): ReactElement {
     </svg>
   )
 }
-
-/** Drag-handle grip: two columns of three dots (cards and stage heads). */
-export function GripIcon({ color = '#b0b6bd' }: { color?: string }): ReactElement {
-  return (
-    <svg width="8" height="12" viewBox="0 0 8 12" aria-hidden="true">
-      <circle cx="2.5" cy="2.5" r="1.3" fill={color} />
-      <circle cx="5.5" cy="2.5" r="1.3" fill={color} />
-      <circle cx="2.5" cy="6" r="1.3" fill={color} />
-      <circle cx="5.5" cy="6" r="1.3" fill={color} />
-      <circle cx="2.5" cy="9.5" r="1.3" fill={color} />
-      <circle cx="5.5" cy="9.5" r="1.3" fill={color} />
-    </svg>
-  )
-}

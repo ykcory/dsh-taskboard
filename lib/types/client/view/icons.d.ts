@@ -11,7 +11,3 @@ export declare function PlusIcon({ size, stroke }: {
 }): ReactElement;
 /** Select dropdown chevron (design chevronSvg). */
 export declare function ChevronIcon(): ReactElement;
-/** Drag-handle grip: two columns of three dots (cards and stage heads). */
-export declare function GripIcon({ color }: {
-    color?: string;
-}): ReactElement;
